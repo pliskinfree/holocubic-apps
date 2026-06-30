@@ -1,0 +1,4 @@
+name = Settings
+entry = main.lua
+icon = main.png
+description = Device settings

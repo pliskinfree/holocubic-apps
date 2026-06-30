@@ -1,0 +1,4 @@
+name = Weather
+kind = app
+entry = main.lua
+description = QWeather card with device settings

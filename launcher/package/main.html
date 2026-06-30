@@ -1,0 +1,6047 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cubic Control</title>
+<style>
+:root{
+  --bg:#f7f9fc;
+  --bg-soft:#eff4fb;
+  --surface:#ffffff;
+  --surface-soft:#f6f8fc;
+  --surface-tint:#fbfcff;
+  --line:#dfe7f1;
+  --line-strong:#ccd7e6;
+  --text:#18212d;
+  --muted:#6d7c90;
+  --accent:#da8a2f;
+  --accent-strong:#b86b16;
+  --accent-soft:#fff3e4;
+  --blue:#4b84d8;
+  --blue-strong:#2f67bc;
+  --blue-soft:#eef5ff;
+  --danger:#b24a5a;
+  --danger-soft:#fdeff1;
+  --success:#2f67bc;
+  --shadow-sm:0 8px 20px rgba(47,76,122,.06);
+  --shadow:0 20px 52px rgba(47,76,122,.08);
+  --radius:20px;
+  --radius-sm:14px;
+}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{
+  margin:0;
+  color:var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(75,132,216,.08), transparent 28%),
+    radial-gradient(circle at top right, rgba(218,138,47,.05), transparent 24%),
+    linear-gradient(180deg, #fcfdff 0%, var(--bg) 55%, #f3f7fc 100%);
+  font:15px/1.55 "Segoe UI Variable","Aptos","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+.hidden{display:none!important}
+.visually-hidden{
+  position:absolute!important;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:-1px;
+  overflow:hidden;
+  clip:rect(0,0,0,0);
+  white-space:nowrap;
+  border:0;
+}
+.shell,.wifi-shell{
+  width:min(1140px,calc(100% - 24px));
+  margin:0 auto;
+  padding:24px 0 28px;
+}
+.control-shell{display:grid;gap:18px}
+.topbar,.topbar-actions,.card-head,.toolbar,.settings-actions,.status-line,.row,.app-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  align-items:center;
+}
+.topbar{
+  justify-content:space-between;
+  align-items:flex-end;
+  gap:16px;
+  padding:6px 4px 2px;
+}
+.topbar-meta{max-width:560px}
+.eyebrow{
+  display:inline-flex;
+  min-height:32px;
+  align-items:center;
+  padding:0 12px;
+  border-radius:999px;
+  border:1px solid rgba(218,138,47,.18);
+  background:rgba(218,138,47,.10);
+  color:var(--accent-strong);
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+}
+.topbar h1{
+  margin:10px 0 0;
+  font-size:clamp(28px,4vw,36px);
+  line-height:1.08;
+  letter-spacing:-.04em;
+}
+.topbar p,.helper,.app-note,.app-id,.hero-note{margin:8px 0 0;color:var(--muted)}
+.hero-card,.card,.wifi-card{
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  background:rgba(255,255,255,.92);
+  box-shadow:var(--shadow);
+}
+.hero-card{
+  display:grid;
+  gap:18px;
+  grid-template-columns:minmax(0,1.1fr) minmax(320px,.9fr);
+  padding:22px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(75,132,216,.06), transparent 26%),
+    radial-gradient(circle at 18% 100%, rgba(218,138,47,.05), transparent 24%),
+    rgba(255,255,255,.94);
+}
+.hero-copy h2{
+  margin:6px 0 0;
+  font-size:clamp(30px,5vw,40px);
+  line-height:1.05;
+  letter-spacing:-.04em;
+}
+.route-chip{
+  display:inline-flex;
+  align-items:center;
+  min-height:30px;
+  padding:0 10px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:var(--blue-soft);
+  color:#40689c;
+  font-size:13px;
+  font-weight:600;
+  font-family:"Cascadia Code","Consolas","SFMono-Regular",monospace;
+}
+.summary-grid,.network-grid,.settings-grid,.apps-list{
+  display:grid;
+  gap:12px;
+}
+.summary-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.summary-item,.metric,.app-card,.wifi-field-box{
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(246,248,252,.98));
+  padding:14px 16px;
+}
+.summary-item span,.metric span,.field span,.wifi-field-box span{
+  display:block;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:.02em;
+}
+.summary-item strong,.metric strong,.wifi-field-box strong{
+  display:block;
+  margin-top:8px;
+  font-size:18px;
+  line-height:1.2;
+}
+.summary-item .status-line{margin-top:8px}
+.dashboard-grid{
+  display:grid;
+  grid-template-columns:minmax(0,1.35fr) minmax(320px,.95fr);
+  gap:18px;
+  align-items:start;
+}
+.side-stack{display:grid;gap:18px}
+.card{
+  padding:18px;
+  box-shadow:var(--shadow-sm);
+}
+.card-head{
+  justify-content:space-between;
+  align-items:flex-start;
+  margin-bottom:14px;
+}
+.section-kicker{
+  display:block;
+  margin-bottom:4px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.card h2{
+  margin:0;
+  font-size:24px;
+  line-height:1.1;
+  letter-spacing:-.03em;
+}
+.card-head .helper{max-width:32ch}
+.btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  appearance:none;
+  min-height:42px;
+  padding:0 14px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:var(--surface);
+  color:var(--text);
+  text-decoration:none;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease, background-color .16s ease;
+}
+.btn:hover{
+  transform:translateY(-1px);
+  box-shadow:var(--shadow-sm);
+  border-color:var(--line-strong);
+}
+.btn:focus-visible,.wifi-inline-btn:focus-visible,.wifi-icon-btn:focus-visible,.wifi-choice-trigger:focus-visible,.wifi-submit:focus-visible,.wifi-skip:focus-visible,.field input:focus-visible,.field select:focus-visible,.wifi-input:focus-visible{
+  outline:none;
+  border-color:rgba(59,111,182,.45);
+  box-shadow:0 0 0 4px rgba(59,111,182,.12);
+}
+.btn.primary{
+  border-color:rgba(75,132,216,.22);
+  background:linear-gradient(180deg, var(--blue) 0%, var(--blue-strong) 100%);
+  color:#fff;
+  box-shadow:0 12px 26px rgba(75,132,216,.20);
+}
+.btn.secondary{
+  border-color:rgba(218,138,47,.18);
+  background:var(--accent-soft);
+  color:var(--accent-strong);
+}
+.btn.danger{
+  border-color:#f2cdd3;
+  background:var(--danger-soft);
+  color:var(--danger);
+}
+.btn.ghost{background:transparent}
+.btn[disabled]{
+  opacity:.5;
+  cursor:not-allowed;
+  transform:none;
+  box-shadow:none;
+}
+.btn.compact{
+  min-height:32px;
+  padding:0 12px;
+  border-radius:999px;
+  font-size:13px;
+  font-weight:700;
+}
+.pill,.tag,.badge{
+  display:inline-flex;
+  align-items:center;
+  min-height:30px;
+  padding:0 12px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:var(--surface);
+  font-size:13px;
+  font-weight:700;
+}
+.badge.online{color:var(--blue-strong);background:var(--blue-soft);border-color:rgba(75,132,216,.16)}
+.badge.offline{color:var(--danger);background:var(--danger-soft);border-color:#f2cdd3}
+.badge.neutral{color:#566578;background:var(--surface-soft)}
+.tag.current{
+  color:var(--accent-strong);
+  background:var(--accent-soft);
+  border-color:rgba(218,138,47,.18);
+}
+.apps-card{min-height:100%}
+.resource-grid,.media-page-grid,.media-upload-grid{
+  display:grid;
+  gap:12px;
+}
+.resource-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.resource-card .card-head{margin-bottom:12px}
+.resource-card .helper{max-width:28ch}
+.firmware-update-card .card-head{margin-bottom:12px}
+.firmware-grid{
+  display:grid;
+  gap:12px;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+}
+.firmware-note{
+  margin:12px 0 0;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.45;
+  overflow-wrap:anywhere;
+}
+.firmware-progress{
+  position:relative;
+  overflow:hidden;
+  height:10px;
+  margin-top:12px;
+  border-radius:999px;
+  border:1px solid var(--line);
+  background:var(--surface-soft);
+}
+.firmware-progress-fill{
+  display:block;
+  width:0;
+  height:100%;
+  border-radius:inherit;
+  background:linear-gradient(90deg, var(--blue), var(--accent));
+  transition:width .22s ease;
+}
+.firmware-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:12px;
+}
+.firmware-actions .btn{flex:1 1 130px}
+.media-hero{
+  display:grid;
+  gap:18px;
+  grid-template-columns:minmax(0,1.08fr) minmax(320px,.92fr);
+  padding:22px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(75,132,216,.05), transparent 24%),
+    radial-gradient(circle at 18% 100%, rgba(218,138,47,.06), transparent 22%),
+    rgba(255,255,255,.95);
+}
+.media-summary{
+  display:grid;
+  gap:16px;
+  align-content:start;
+}
+.media-summary h2{
+  margin:6px 0 0;
+  font-size:clamp(28px,4.8vw,38px);
+  line-height:1.06;
+  letter-spacing:-.04em;
+}
+.media-summary .helper{max-width:42ch}
+.media-usage{
+  display:inline-flex;
+  align-items:center;
+  min-height:28px;
+  padding:0 10px;
+  border-radius:999px;
+  background:var(--surface-soft);
+  color:#61758f;
+  font-size:12px;
+  font-weight:700;
+}
+.media-upload-grid{grid-template-columns:1fr}
+.upload-card{
+  border:1px solid var(--line);
+  border-radius:18px;
+  padding:18px;
+  background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(246,249,255,.95));
+  box-shadow:var(--shadow-sm);
+}
+.upload-card.gif{
+  border-color:rgba(218,138,47,.18);
+  background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,247,235,.94));
+}
+.upload-card h3{
+  margin:0;
+  font-size:18px;
+  line-height:1.2;
+}
+.upload-card p{
+  margin:8px 0 14px;
+  color:var(--muted);
+  font-size:13px;
+}
+.media-page-grid{grid-template-columns:1fr;align-items:start}
+.media-section{padding:18px}
+.media-library-head{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:14px;
+  margin-bottom:14px;
+}
+.media-switch{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px;
+  border:1px solid var(--line);
+  border-radius:999px;
+  background:var(--surface-soft);
+}
+.media-switch-btn{
+  appearance:none;
+  min-height:34px;
+  padding:0 14px;
+  border:0;
+  border-radius:999px;
+  background:transparent;
+  color:#64758a;
+  font-size:13px;
+  font-weight:700;
+  cursor:pointer;
+  transition:background-color .16s ease, color .16s ease, box-shadow .16s ease;
+}
+.media-switch-btn:hover{
+  color:var(--text);
+}
+.media-switch-btn.active{
+  background:#fff;
+  color:var(--blue-strong);
+  box-shadow:0 4px 12px rgba(47,76,122,.08);
+}
+.media-grid{
+  display:grid;
+  gap:12px;
+}
+.media-card{
+  display:grid;
+  grid-template-columns:112px minmax(0,1fr);
+  gap:14px;
+  align-items:start;
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:linear-gradient(180deg, rgba(255,255,255,.99), rgba(247,250,255,.96));
+}
+.media-preview{
+  aspect-ratio:1 / 1;
+  border:1px solid var(--line);
+  border-radius:14px;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(75,132,216,.08), transparent 30%),
+    linear-gradient(180deg, rgba(246,250,255,.98), rgba(240,246,255,.92));
+  display:grid;
+  place-items:center;
+}
+.media-preview img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+.media-preview span{
+  padding:12px;
+  color:var(--muted);
+  font-size:13px;
+  text-align:center;
+}
+.media-copy{
+  display:grid;
+  gap:8px;
+  min-width:0;
+}
+.media-copy h3{
+  margin:0;
+  font-size:15px;
+  line-height:1.35;
+  word-break:break-all;
+}
+.media-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  align-items:center;
+}
+.media-meta .pill{
+  min-height:28px;
+  padding:0 10px;
+  font-size:12px;
+}
+.media-size{
+  color:var(--muted);
+  font-size:12px;
+  font-weight:600;
+}
+.media-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:2px;
+}
+.media-actions .btn{
+  min-height:36px;
+  padding:0 12px;
+  font-size:13px;
+  font-weight:700;
+}
+.media-status{
+  min-height:22px;
+  margin-top:2px;
+  color:var(--muted);
+  font-size:13px;
+}
+.media-status.error{color:var(--danger)}
+.media-empty{
+  min-height:220px;
+  display:grid;
+  place-items:center;
+  text-align:left;
+}
+.media-empty strong{
+  display:block;
+  margin-bottom:6px;
+  color:var(--text);
+}
+.apps-list{grid-template-columns:1fr}
+.app-card{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:14px;
+  align-items:center;
+}
+.app-card.current{
+  border-color:rgba(218,138,47,.22);
+  background:linear-gradient(180deg, #fffdf9 0%, #fff7ec 100%);
+}
+.app-main{
+  display:grid;
+  grid-template-columns:52px minmax(0,1fr);
+  gap:14px;
+  align-items:center;
+}
+.app-copy{min-width:0}
+.app-icon{
+  width:52px;
+  height:52px;
+  border-radius:16px;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  border:1px solid rgba(59,111,182,.12);
+  background:linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+}
+.app-icon img{width:100%;height:100%;object-fit:cover;display:block}
+.app-icon span{font-size:18px;font-weight:800;color:#355d95}
+.app-name{
+  margin:0;
+  font-size:17px;
+  line-height:1.2;
+}
+.app-id{
+  font-size:13px;
+  font-family:"Cascadia Code","Consolas","SFMono-Regular",monospace;
+}
+.app-note{font-size:13px}
+.app-meta{justify-content:flex-end}
+.field{display:grid;gap:8px}
+.field input,.field select,.wifi-input{
+  width:100%;
+  min-height:44px;
+  padding:0 14px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--surface);
+  transition:border-color .16s ease, box-shadow .16s ease, background-color .16s ease;
+}
+.settings-grid{grid-template-columns:1fr}
+.settings-actions{margin-top:12px}
+.empty{
+  padding:20px;
+  border:1px dashed var(--line-strong);
+  border-radius:16px;
+  background:var(--surface-soft);
+  color:var(--muted);
+}
+.wifi-stage{
+  display:grid;
+  grid-template-columns:minmax(360px,1fr) minmax(360px,.96fr);
+  min-height:min(720px,calc(100dvh - 52px));
+  border-radius:28px;
+  overflow:hidden;
+  border:1px solid var(--line);
+  background:
+    radial-gradient(circle at 12% 16%, rgba(66,140,255,.08), transparent 26%),
+    radial-gradient(circle at 84% 14%, rgba(145,204,255,.09), transparent 20%),
+    radial-gradient(circle at 58% 88%, rgba(218,138,47,.06), transparent 18%),
+    linear-gradient(135deg, rgba(255,255,255,.94), rgba(248,250,255,.88));
+  box-shadow:0 28px 72px rgba(54,112,194,.10);
+}
+.wifi-intro{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  padding:44px 52px;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(72,150,255,.10), transparent 22%),
+    radial-gradient(circle at 76% 82%, rgba(173,220,255,.09), transparent 20%),
+    radial-gradient(circle at 64% 34%, rgba(218,138,47,.08), transparent 16%),
+    linear-gradient(180deg, rgba(255,255,255,.74), rgba(243,247,255,.97));
+  border-right:1px solid var(--line);
+}
+.wifi-copy{
+  width:min(100%,430px);
+  display:grid;
+  justify-items:start;
+  gap:16px;
+}
+.wifi-title-row{
+  display:flex;
+  align-items:center;
+  gap:16px;
+}
+.wifi-brand{
+  width:52px;
+  height:52px;
+  flex:0 0 52px;
+  border-radius:16px;
+  display:grid;
+  place-items:center;
+  color:var(--blue);
+  background:var(--blue-soft);
+  border:1px solid rgba(59,111,182,.16);
+}
+.wifi-brand svg{
+  width:24px;
+  height:24px;
+}
+.wifi-pill{
+  display:inline-flex;
+  align-items:center;
+  min-height:38px;
+  padding:0 18px;
+  border-radius:999px;
+  border:1px solid rgba(218,138,47,.18);
+  background:rgba(255,248,238,.94);
+  color:var(--accent-strong);
+  font-size:16.2px;
+  font-weight:650;
+  letter-spacing:-.02em;
+}
+.wifi-copy h1{
+  margin:0;
+  font-size:clamp(32px,4.8vw,42px);
+  line-height:1;
+  letter-spacing:-.03em;
+  white-space:nowrap;
+}
+.wifi-auth{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:26px;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(151,212,255,.07), transparent 18%),
+    radial-gradient(circle at 18% 82%, rgba(218,138,47,.05), transparent 16%),
+    linear-gradient(180deg, rgba(255,255,255,.93), rgba(246,249,255,.91));
+}
+.wifi-card{
+  width:min(100%,420px);
+  padding:24px;
+  border-radius:24px;
+  border-color:rgba(84,145,224,.12);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(75,132,216,.02), transparent 22%),
+    radial-gradient(circle at 0% 100%, rgba(218,138,47,.04), transparent 20%),
+    linear-gradient(180deg, rgba(255,255,255,.99), rgba(249,251,255,.97));
+  box-shadow:0 18px 40px rgba(64,122,204,.08);
+}
+.wifi-head{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:8px;
+  align-items:flex-start;
+  margin-bottom:18px;
+}
+.wifi-head strong{display:block;font-size:16px}
+.wifi-head span{color:var(--muted);font-size:14px}
+.wifi-form-field{margin-bottom:20px}
+.wifi-form-field label{
+  display:block;
+  margin-bottom:8px;
+  font-size:14px;
+  font-weight:600;
+}
+.wifi-input-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:12px;
+  align-items:center;
+}
+.wifi-inline-btn,.wifi-icon-btn{
+  appearance:none;
+  border:1px solid rgba(84,145,224,.16);
+  background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(244,248,255,.94));
+  color:var(--text);
+  cursor:pointer;
+  transition:box-shadow .16s ease, border-color .16s ease, background-color .16s ease;
+}
+.wifi-inline-btn{
+  min-height:44px;
+  padding:0 16px;
+  border-radius:12px;
+  white-space:nowrap;
+}
+.wifi-inline-btn:hover{
+  box-shadow:var(--shadow-sm);
+  border-color:rgba(84,145,224,.28);
+}
+.wifi-inline-btn[disabled],.wifi-icon-btn[disabled]{
+  opacity:.55;
+  cursor:not-allowed;
+  box-shadow:none;
+}
+.wifi-input-wrap{
+  position:relative;
+  display:flex;
+  align-items:center;
+}
+.wifi-select-shell{
+  position:relative;
+  min-width:0;
+}
+.wifi-select-shell .wifi-input,
+.wifi-choice-trigger{
+  padding-left:48px;
+}
+.wifi-native-select{
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:-1px;
+  overflow:hidden;
+  clip:rect(0,0,0,0);
+  white-space:nowrap;
+  border:0;
+}
+.wifi-choice-trigger{
+  position:relative;
+  z-index:0;
+  width:100%;
+  min-height:44px;
+  padding-right:40px;
+  border:1px solid rgba(84,145,224,.16);
+  border-radius:12px;
+  background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(245,249,255,.94));
+  text-align:left;
+  cursor:pointer;
+}
+.wifi-choice-trigger:disabled{
+  opacity:.62;
+  cursor:not-allowed;
+}
+.wifi-choice-text{
+  display:block;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.wifi-choice-caret{
+  position:absolute;
+  right:14px;
+  top:50%;
+  width:8px;
+  height:8px;
+  border-right:2px solid #62748c;
+  border-bottom:2px solid #62748c;
+  transform:translateY(-62%) rotate(45deg);
+  transition:transform .16s ease;
+}
+.wifi-select-shell.is-open .wifi-choice-caret{
+  transform:translateY(-24%) rotate(225deg);
+}
+.wifi-choice-menu{
+  position:absolute;
+  left:0;
+  right:0;
+  top:calc(100% + 8px);
+  z-index:12;
+  max-height:min(260px,42dvh);
+  overflow:auto;
+  padding:6px;
+  border:1px solid rgba(84,145,224,.18);
+  border-radius:16px;
+  background:rgba(255,255,255,.98);
+  box-shadow:0 18px 42px rgba(48,88,144,.18);
+}
+.wifi-choice-option{
+  width:100%;
+  min-height:44px;
+  display:grid;
+  grid-template-columns:24px minmax(0,1fr);
+  gap:10px;
+  align-items:center;
+  padding:8px 10px;
+  border:0;
+  border-radius:12px;
+  background:transparent;
+  color:var(--text);
+  text-align:left;
+  cursor:pointer;
+}
+.wifi-choice-option:hover,
+.wifi-choice-option[aria-selected="true"]{
+  background:var(--blue-soft);
+}
+.wifi-choice-option-copy{
+  min-width:0;
+}
+.wifi-choice-name-row{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.wifi-choice-option-name{
+  display:block;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.wifi-choice-option-name{
+  flex:1 1 auto;
+  min-width:0;
+  font-weight:650;
+}
+.wifi-choice-signal{
+  width:22px;
+  height:22px;
+  color:#9aa9bc;
+}
+.wifi-choice-signal path,
+.wifi-choice-signal circle{
+  opacity:.26;
+}
+.wifi-choice-lock{
+  width:15px;
+  height:15px;
+  flex:0 0 15px;
+  color:#718297;
+}
+.wifi-signal-icon{
+  position:absolute;
+  left:14px;
+  top:50%;
+  width:22px;
+  height:22px;
+  color:#9aa9bc;
+  pointer-events:none;
+  transform:translateY(-50%);
+  z-index:1;
+}
+.wifi-signal-icon path,
+.wifi-signal-icon circle{
+  opacity:.26;
+}
+.wifi-select-shell.signal-1 .wifi-signal-dot,
+.wifi-select-shell.signal-2 .wifi-signal-dot,
+.wifi-select-shell.signal-2 .wifi-signal-low,
+.wifi-select-shell.signal-3 .wifi-signal-dot,
+.wifi-select-shell.signal-3 .wifi-signal-low,
+.wifi-select-shell.signal-3 .wifi-signal-mid,
+.wifi-select-shell.signal-4 .wifi-signal-dot,
+.wifi-select-shell.signal-4 .wifi-signal-low,
+.wifi-select-shell.signal-4 .wifi-signal-mid,
+.wifi-select-shell.signal-4 .wifi-signal-high,
+.wifi-choice-signal.signal-1 .wifi-signal-dot,
+.wifi-choice-signal.signal-2 .wifi-signal-dot,
+.wifi-choice-signal.signal-2 .wifi-signal-low,
+.wifi-choice-signal.signal-3 .wifi-signal-dot,
+.wifi-choice-signal.signal-3 .wifi-signal-low,
+.wifi-choice-signal.signal-3 .wifi-signal-mid,
+.wifi-choice-signal.signal-4 .wifi-signal-dot,
+.wifi-choice-signal.signal-4 .wifi-signal-low,
+.wifi-choice-signal.signal-4 .wifi-signal-mid,
+.wifi-choice-signal.signal-4 .wifi-signal-high{
+  opacity:1;
+}
+.wifi-select-shell.signal-1,
+.wifi-select-shell.signal-2,
+.wifi-select-shell.signal-3,
+.wifi-select-shell.signal-4,
+.wifi-choice-signal.signal-1,
+.wifi-choice-signal.signal-2,
+.wifi-choice-signal.signal-3,
+.wifi-choice-signal.signal-4{
+  color:var(--blue);
+}
+.wifi-input-wrap .wifi-input{padding-right:52px}
+.wifi-card .wifi-input{
+  border-color:rgba(84,145,224,.16);
+  background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(245,249,255,.94));
+}
+.wifi-icon-btn{
+  position:absolute;
+  top:4px;
+  right:4px;
+  bottom:4px;
+  width:36px;
+  height:auto;
+  padding:0;
+  border-radius:10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  line-height:0;
+}
+.wifi-icon-btn:hover{
+  background:#eef5ff;
+  border-color:rgba(84,145,224,.28);
+}
+.wifi-icon-btn svg{
+  width:18px;
+  height:18px;
+  display:block;
+}
+.wifi-actions{
+  display:grid;
+  gap:12px;
+  margin-top:6px;
+}
+.wifi-submit{
+  min-height:50px;
+  border:0;
+  border-radius:14px;
+  background:linear-gradient(180deg, #2f89ff 0%, #176be7 100%);
+  color:#fff;
+  font-weight:650;
+  cursor:pointer;
+  box-shadow:0 14px 28px rgba(47,137,255,.24);
+  transition:background-color .16s ease, box-shadow .16s ease, color .16s ease;
+}
+.wifi-submit[disabled]{
+  background:#d7dee8;
+  color:#6f7f93;
+  cursor:not-allowed;
+  box-shadow:none;
+  opacity:1;
+}
+.wifi-skip{
+  width:auto;
+  min-height:32px;
+  padding:0;
+  align-self:center;
+  border:0;
+  background:transparent;
+  color:#7f8ea6;
+  font-size:.92rem;
+  font-weight:500;
+  cursor:pointer;
+}
+.wifi-skip:hover{color:#4f6f9f}
+.wifi-status{
+  min-height:22px;
+  margin-top:14px;
+  font-size:.93rem;
+  color:var(--success);
+  opacity:0;
+  transform:translateY(4px);
+  transition:opacity .18s ease, transform .18s ease;
+}
+.wifi-status.show{opacity:1;transform:translateY(0)}
+#toast{
+  position:fixed;
+  right:18px;
+  bottom:18px;
+  max-width:min(360px,calc(100% - 24px));
+  padding:13px 15px;
+  border-radius:14px;
+  background:#183a63;
+  color:#fff;
+  box-shadow:0 18px 34px rgba(0,0,0,.18);
+  opacity:0;
+  transform:translateY(10px);
+  transition:opacity .18s ease, transform .18s ease;
+  pointer-events:none;
+  z-index:20;
+}
+#toast.show{opacity:1;transform:translateY(0)}
+@media (max-width:960px){
+  .topbar,.hero-card,.dashboard-grid,.wifi-stage,.media-hero,.media-page-grid{grid-template-columns:1fr}
+  .topbar{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+  .summary-grid,.network-grid,.resource-grid,.firmware-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .wifi-intro{
+    border-right:0;
+    border-bottom:1px solid var(--line);
+  }
+}
+@media (max-width:700px){
+  .shell,.wifi-shell{width:min(100% - 16px,1140px);padding:12px 0 18px}
+  .summary-grid,.network-grid,.resource-grid,.firmware-grid{grid-template-columns:1fr}
+  .topbar-actions{width:100%}
+  .topbar-actions .btn{flex:1 1 auto}
+  .media-card{grid-template-columns:1fr}
+  .app-meta{justify-content:flex-start}
+  .topbar{
+    gap:10px;
+    padding:0;
+  }
+  .eyebrow{
+    min-height:28px;
+    padding:0 10px;
+    font-size:11px;
+  }
+  .topbar h1{
+    margin-top:8px;
+    font-size:26px;
+    letter-spacing:-.03em;
+  }
+  .hero-card{
+    display:none;
+  }
+  .hero-copy{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+  }
+  .hero-copy h2{
+    margin:0;
+    font-size:24px;
+  }
+  .hero-card .section-kicker{
+    margin:0;
+  }
+  .summary-grid{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .summary-item{
+    flex:0 1 auto;
+    min-height:32px;
+    padding:0;
+    border:0;
+    background:transparent;
+  }
+  .summary-item > span{
+    display:none;
+  }
+  .summary-item strong,
+  .summary-item .badge{
+    margin:0;
+    min-height:30px;
+    padding:0 10px;
+    border-radius:999px;
+    border:1px solid var(--line);
+    background:var(--surface-soft);
+    font-size:13px;
+  }
+  .summary-item .status-line{
+    margin:0;
+  }
+  .dashboard-grid,
+  .side-stack{
+    gap:12px;
+  }
+  .card{
+    padding:14px;
+    border-radius:18px;
+  }
+  .card-head{
+    margin-bottom:10px;
+  }
+  .card h2{
+    font-size:21px;
+  }
+  .app-card{
+    grid-template-columns:minmax(0,1fr) auto;
+    gap:10px;
+    padding:10px 12px;
+    border-radius:14px;
+  }
+  .app-main{
+    grid-template-columns:40px minmax(0,1fr);
+    gap:10px;
+  }
+  .app-icon{
+    width:40px;
+    height:40px;
+    border-radius:12px;
+  }
+  .app-name{
+    font-size:15px;
+  }
+  .app-note{
+    margin-top:2px;
+  }
+  .app-meta{
+    justify-content:flex-end;
+    gap:8px;
+  }
+  .app-status{
+    display:none;
+  }
+  .app-actions{
+    flex-wrap:nowrap;
+  }
+  .app-actions .btn{
+    min-height:36px;
+    padding:0 12px;
+    border-radius:12px;
+    font-size:13px;
+  }
+  .wifi-stage{
+    min-height:auto;
+    border-radius:22px;
+  }
+  .wifi-intro{
+    padding:30px 18px 22px;
+  }
+  .wifi-copy{
+    max-width:none;
+    display:grid;
+    justify-items:center;
+    gap:12px;
+    text-align:center;
+  }
+  .wifi-title-row{
+    display:contents;
+  }
+  .wifi-brand{
+    width:40px;
+    height:40px;
+    flex-basis:40px;
+    margin:0 auto 6px;
+    border-radius:14px;
+  }
+  .wifi-pill{
+    min-height:34px;
+    padding:0 14px;
+    font-size:14px;
+    order:2;
+  }
+  .wifi-copy h1{
+    font-size:32px;
+    order:3;
+  }
+  .wifi-auth{
+    padding:18px;
+  }
+  .wifi-card{
+    padding:18px;
+    border-radius:20px;
+  }
+  .wifi-input-row{
+    grid-template-columns:1fr;
+    gap:10px;
+  }
+  .wifi-inline-btn{
+    width:100%;
+  }
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation:none!important;
+    transition:none!important;
+    scroll-behavior:auto!important;
+  }
+}
+
+.app-manage-view{
+  --store-bg:#edf3ee;
+  --store-surface:rgba(255,255,255,.7);
+  --store-surface-strong:rgba(255,255,255,.9);
+  --store-line:rgba(22,35,27,.08);
+  --store-line-strong:rgba(22,35,27,.12);
+  --store-text:#15211c;
+  --store-muted:#68766e;
+  --store-accent:#1d8a67;
+  --store-accent-strong:#15644c;
+  --store-accent-soft:rgba(29,138,103,.12);
+  --store-danger:#b34d61;
+  --store-danger-soft:rgba(179,77,97,.12);
+  --store-shadow:0 24px 64px rgba(20,41,31,.08);
+  position:relative;
+  overflow-x:hidden;
+  color:var(--store-text);
+  background:
+    radial-gradient(circle at top left, rgba(29,138,103,.14), transparent 30%),
+    radial-gradient(circle at top right, rgba(47,117,196,.12), transparent 26%),
+    linear-gradient(180deg, #f8fbf9 0%, var(--store-bg) 50%, #ebf1ed 100%);
+  border-radius:32px;
+}
+
+.app-manage-view::before,
+.app-manage-view::after{
+  content:"";
+  position:absolute;
+  inset:auto;
+  width:240px;
+  height:240px;
+  border-radius:50%;
+  filter:blur(28px);
+  pointer-events:none;
+  z-index:0;
+}
+
+.app-manage-view::before{
+  top:38px;
+  left:-72px;
+  background:rgba(186,236,214,.34);
+}
+
+.app-manage-view::after{
+  right:-56px;
+  bottom:58px;
+  background:rgba(196,220,255,.28);
+}
+
+.app-manage-view button{
+  font:inherit;
+  border:0;
+  background:none;
+  color:inherit;
+}
+
+.app-manage-view *{
+  box-sizing:border-box;
+}
+
+.app-manage-view .store-shell{
+  position:relative;
+  z-index:1;
+  width:min(1060px,calc(100% - 24px));
+  margin:0 auto;
+  padding:24px 0 30px;
+}
+
+.app-manage-view .store-board{
+  padding:28px;
+  border:1px solid rgba(255,255,255,.86);
+  border-radius:36px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.84), rgba(255,255,255,.62)),
+    radial-gradient(circle at top right, rgba(191,224,255,.18), transparent 30%);
+  box-shadow:0 32px 84px rgba(17,34,26,.08);
+  backdrop-filter:blur(22px);
+}
+
+.app-manage-view .store-topbar,
+.app-manage-view .store-hero,
+.app-manage-view .store-hero-main,
+.app-manage-view .store-hero-side,
+.app-manage-view .store-section-head,
+.app-manage-view .store-app-head,
+.app-manage-view .store-app-meta,
+.app-manage-view .store-app-actions{
+  display:flex;
+  align-items:center;
+}
+
+.app-manage-view .store-topbar,
+.app-manage-view .store-hero,
+.app-manage-view .store-section-head,
+.app-manage-view .store-app-actions{
+  justify-content:space-between;
+}
+
+.app-manage-view .store-topbar{
+  gap:12px;
+  margin-bottom:18px;
+}
+
+.app-manage-view .store-topbar-actions{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  justify-content:flex-end;
+  gap:10px;
+}
+
+.app-manage-view .store-source-field{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-height:40px;
+  padding:0 12px;
+  border:1px solid var(--store-line);
+  border-radius:999px;
+  background:rgba(255,255,255,.78);
+}
+
+.app-manage-view .store-source-field span{
+  color:var(--store-muted);
+  font-size:12px;
+  font-weight:700;
+  white-space:nowrap;
+}
+
+.app-manage-view .store-source-input{
+  width:min(340px,42vw);
+  min-width:180px;
+  padding:0;
+  border:0;
+  outline:none;
+  background:transparent;
+  color:var(--text);
+  font:inherit;
+}
+
+.app-manage-view .store-source-input::placeholder{
+  color:rgba(89,112,101,.7);
+}
+
+.app-manage-view .store-brand-mark,
+.app-manage-view .store-app-icon{
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+}
+
+.app-manage-view .store-brand-mark{
+  width:42px;
+  height:42px;
+  border-radius:16px;
+  border:1px solid rgba(29,138,103,.16);
+  background:linear-gradient(145deg, rgba(29,138,103,.18), rgba(29,138,103,.06));
+  color:var(--store-accent-strong);
+  font-weight:800;
+  letter-spacing:.04em;
+}
+
+.app-manage-view .store-topbar-title{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.app-manage-view .store-topbar-copy span,
+.app-manage-view .store-section-head span{
+  display:block;
+  color:var(--store-muted);
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+.app-manage-view .store-topbar-copy strong{
+  display:block;
+  font-size:18px;
+}
+
+.app-manage-view .store-count-pill,
+.app-manage-view .store-tab{
+  min-height:38px;
+  padding:0 13px;
+  border-radius:999px;
+  border:1px solid var(--store-line);
+  background:rgba(255,255,255,.78);
+}
+
+.app-manage-view .store-count-pill{
+  display:inline-flex;
+  align-items:center;
+  color:var(--store-muted);
+  font-size:13px;
+  font-weight:700;
+}
+
+.app-manage-view .store-hero{
+  gap:18px;
+  margin-bottom:18px;
+  padding:20px;
+  border:1px solid var(--store-line);
+  border-radius:30px;
+  background:
+    radial-gradient(circle at top right, rgba(38,116,206,.12), transparent 34%),
+    linear-gradient(135deg, rgba(255,255,255,.94), rgba(244,249,246,.76));
+  box-shadow:var(--store-shadow);
+  backdrop-filter:blur(18px);
+}
+
+.app-manage-view .store-hero-main{
+  flex:1 1 0;
+  gap:16px;
+}
+
+.app-manage-view .store-hero-copy{
+  min-width:0;
+}
+
+.app-manage-view .store-eyebrow{
+  display:inline-flex;
+  align-items:center;
+  min-height:32px;
+  padding:0 12px;
+  border-radius:999px;
+  background:var(--store-accent-soft);
+  color:var(--store-accent-strong);
+  font-size:12px;
+  font-weight:700;
+}
+
+.app-manage-view .store-hero h1{
+  margin:10px 0 0;
+  font-size:clamp(28px,6.3vw,50px);
+  line-height:.94;
+  letter-spacing:-.05em;
+}
+
+.app-manage-view .store-hero-copy p{
+  margin:10px 0 0;
+  max-width:28ch;
+  color:var(--store-muted);
+}
+
+.app-manage-view .store-hero-side{
+  flex:0 0 260px;
+  flex-direction:column;
+  align-items:stretch;
+  gap:12px;
+  padding:16px;
+  border:1px solid var(--store-line);
+  border-radius:24px;
+  background:rgba(255,255,255,.62);
+  backdrop-filter:blur(16px);
+}
+
+.app-manage-view .store-hero-side-copy{
+  min-width:0;
+}
+
+.app-manage-view .store-hero-side-actions{
+  display:flex;
+  gap:10px;
+}
+
+.app-manage-view .store-hero-side-actions .store-btn{
+  flex:1 1 0;
+}
+
+.app-manage-view .store-hero-side-copy span{
+  display:block;
+  color:var(--store-muted);
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+.app-manage-view .store-hero-side-copy strong{
+  display:block;
+  margin-top:6px;
+  font-size:18px;
+}
+
+.app-manage-view .store-hero-side-copy p{
+  margin:6px 0 0;
+  color:var(--store-muted);
+  font-size:14px;
+}
+
+.app-manage-view .store-status-text{
+  min-height:20px;
+}
+
+.app-manage-view .store-hero-icon{
+  width:80px;
+  height:80px;
+  flex:0 0 80px;
+}
+
+.app-manage-view .store-toolbar{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:0 0 20px;
+}
+
+.app-manage-view .store-toolbar::-webkit-scrollbar{
+  display:none;
+}
+
+.app-manage-view .store-tab{
+  cursor:pointer;
+  transition:transform .18s ease, border-color .18s ease, background .18s ease, color .18s ease;
+}
+
+.app-manage-view .store-tab:hover{
+  transform:translateY(-1px);
+}
+
+.app-manage-view .store-tab.active{
+  border-color:rgba(29,138,103,.22);
+  background:linear-gradient(135deg, rgba(29,138,103,.18), rgba(29,138,103,.08));
+  color:var(--store-accent-strong);
+}
+
+.app-manage-view .store-section-head{
+  gap:12px;
+  margin-bottom:28px;
+  padding-top:6px;
+}
+
+.app-manage-view .store-section-head h2{
+  margin:2px 0 0;
+  font-size:24px;
+  line-height:1;
+}
+
+.app-manage-view .store-apps{
+  display:grid;
+  gap:22px;
+  grid-template-columns:repeat(auto-fit,minmax(208px,1fr));
+  padding:2px 0 8px;
+}
+
+.app-manage-view .store-app-card{
+  position:relative;
+  overflow:hidden;
+  display:grid;
+  gap:14px;
+  padding:18px;
+  border:1px solid rgba(255,255,255,.72);
+  border-radius:24px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.88), rgba(255,255,255,.66)),
+    radial-gradient(circle at top right, rgba(204,229,255,.22), transparent 38%),
+    radial-gradient(circle at top left, rgba(255,255,255,.52), transparent 34%);
+  box-shadow:
+    0 22px 42px rgba(17,34,26,.08),
+    inset 0 1px 0 rgba(255,255,255,.72);
+  transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease, opacity .2s ease;
+  animation:store-card-in .45s ease both;
+  backdrop-filter:blur(28px) saturate(130%);
+}
+
+.app-manage-view .store-app-card:hover{
+  transform:translateY(-2px);
+  border-color:rgba(255,255,255,.82);
+  box-shadow:
+    0 26px 52px rgba(17,34,26,.1),
+    inset 0 1px 0 rgba(255,255,255,.78);
+}
+
+.app-manage-view .store-app-card::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:linear-gradient(135deg, rgba(255,255,255,.34), transparent 46%);
+  pointer-events:none;
+}
+
+.app-manage-view .store-app-card.is-hidden,
+.app-manage-view .is-hidden{
+  display:none !important;
+}
+
+.app-manage-view .store-app-head{
+  gap:14px;
+  align-items:flex-start;
+}
+
+.app-manage-view .store-app-icon{
+  width:72px;
+  height:72px;
+  flex:0 0 72px;
+  border-radius:20px;
+  border:1px solid rgba(20,32,26,.08);
+  color:#173628;
+  font-size:24px;
+  font-weight:800;
+  letter-spacing:-.04em;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55);
+}
+.app-manage-view .store-app-icon.has-image{
+  background:#fff;
+}
+.app-manage-view .store-app-icon img{
+  width:100%;
+  height:100%;
+  display:block;
+  object-fit:cover;
+}
+
+.app-manage-view .store-theme-green{background:linear-gradient(145deg, #e7f8f0, #bce8d1)}
+.app-manage-view .store-theme-blue{background:linear-gradient(145deg, #eaf3ff, #c6dcff)}
+.app-manage-view .store-theme-orange{background:linear-gradient(145deg, #fff0df, #ffd1a3)}
+.app-manage-view .store-theme-violet{background:linear-gradient(145deg, #f2ecff, #d7c8ff)}
+.app-manage-view .store-theme-slate{background:linear-gradient(145deg, #f0f3f6, #cfd8e2)}
+.app-manage-view .store-theme-rose{background:linear-gradient(145deg, #ffecef, #ffc9d5)}
+.app-manage-view .store-theme-mint{background:linear-gradient(145deg, #eafbf7, #bfeede)}
+.app-manage-view .store-theme-gold{background:linear-gradient(145deg, #fff7dd, #ffe29c)}
+
+.app-manage-view .store-app-summary{
+  display:grid;
+  gap:10px;
+}
+
+.app-manage-view .store-app-copy{
+  min-width:0;
+}
+
+.app-manage-view .store-app-copy h3{
+  margin:2px 0 0;
+  font-size:18px;
+  line-height:1.1;
+}
+
+.app-manage-view .store-app-copy p{
+  margin:6px 0 0;
+  color:var(--store-muted);
+  font-size:14px;
+}
+
+.app-manage-view .store-app-meta{
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.app-manage-view .store-tag{
+  display:inline-flex;
+  align-items:center;
+  min-height:26px;
+  padding:0 9px;
+  border-radius:999px;
+  background:rgba(255,255,255,.78);
+  border:1px solid var(--store-line);
+  color:var(--store-muted);
+  font-size:11px;
+  font-weight:700;
+}
+
+.app-manage-view .store-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:42px;
+  padding:0 14px;
+  border:1px solid transparent;
+  border-radius:14px;
+  background:transparent;
+  color:inherit;
+  text-decoration:none;
+  white-space:nowrap;
+  cursor:pointer;
+  transition:transform .18s ease, box-shadow .18s ease, background .18s ease, border-color .18s ease;
+}
+
+.app-manage-view .store-btn-compact{
+  min-height:38px;
+  padding:0 12px;
+  font-size:14px;
+}
+
+.app-manage-view .store-btn:hover{
+  transform:translateY(-1px);
+}
+
+.app-manage-view .store-btn-primary{
+  background:linear-gradient(135deg, var(--store-accent), var(--store-accent-strong));
+  color:#fff;
+  box-shadow:0 12px 24px rgba(29,138,103,.2);
+}
+
+.app-manage-view .store-btn-install{
+  position:relative;
+  overflow:hidden;
+  min-width:76px;
+}
+
+.app-manage-view .store-btn-install.is-installing{
+  border-color:rgba(29,138,103,.2);
+  background:rgba(255,255,255,.7);
+  box-shadow:none;
+  cursor:default;
+}
+
+.app-manage-view .store-btn-install.is-installing:hover{
+  transform:none;
+}
+
+.app-manage-view .store-install-meter{
+  position:absolute;
+  inset:5px;
+  overflow:hidden;
+  border-radius:9px;
+  background:rgba(29,138,103,.12);
+}
+
+.app-manage-view .store-install-fill{
+  position:absolute;
+  inset:0 auto 0 0;
+  width:0;
+  min-width:3px;
+  border-radius:inherit;
+  background:linear-gradient(135deg, var(--store-accent), var(--store-accent-strong));
+  transition:width .28s ease;
+}
+
+.app-manage-view .store-install-label{
+  position:absolute;
+  inset:0;
+  z-index:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#12644d;
+  font-size:12px;
+  font-weight:800;
+  line-height:1;
+  pointer-events:none;
+}
+
+.app-manage-view .store-btn-soft{
+  border:1px solid var(--store-line);
+  background:rgba(255,255,255,.72);
+  backdrop-filter:blur(10px);
+}
+
+.app-manage-view .store-btn-detail{
+  justify-content:flex-start;
+  gap:9px;
+  border-color:rgba(75,132,216,.16);
+  background:
+    linear-gradient(135deg, rgba(237,244,255,.94), rgba(255,255,255,.76)),
+    rgba(255,255,255,.72);
+  color:#2f5f97;
+  box-shadow:
+    0 10px 24px rgba(75,132,216,.10),
+    inset 0 1px 0 rgba(255,255,255,.78);
+}
+
+.app-manage-view .store-btn-detail::before{
+  content:"";
+  width:18px;
+  height:18px;
+  flex:0 0 18px;
+  border-radius:50%;
+  background:
+    radial-gradient(circle at 32% 30%, rgba(255,255,255,.96), rgba(255,255,255,.55) 32%, rgba(75,132,216,.16) 34%, rgba(75,132,216,.94) 100%);
+  box-shadow:0 6px 14px rgba(75,132,216,.18);
+}
+
+.app-manage-view .store-btn-detail:hover{
+  border-color:rgba(75,132,216,.24);
+  box-shadow:
+    0 14px 28px rgba(75,132,216,.14),
+    inset 0 1px 0 rgba(255,255,255,.82);
+}
+
+.app-manage-view .store-btn-danger{
+  border:1px solid rgba(179,77,97,.18);
+  background:var(--store-danger-soft);
+  color:#9b4154;
+}
+
+.app-manage-view .store-btn-danger:hover{
+  box-shadow:0 10px 22px rgba(179,77,97,.12);
+}
+
+.app-manage-view .store-app-actions{
+  gap:10px;
+}
+
+.app-manage-view .store-app-actions:empty{
+  display:none;
+}
+
+.app-manage-view .store-app-actions .store-btn{
+  flex:1 1 0;
+}
+
+.app-manage-view .store-empty{
+  padding:22px 18px;
+  border:1px dashed rgba(22,35,27,.18);
+  border-radius:22px;
+  background:rgba(255,255,255,.6);
+  color:var(--store-muted);
+  text-align:center;
+}
+
+.app-manage-view .store-detail-modal{
+  position:fixed;
+  inset:0;
+  z-index:120;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+}
+
+.app-manage-view .store-detail-backdrop{
+  position:absolute;
+  inset:0;
+  background:
+    radial-gradient(circle at top left, rgba(255,255,255,.2), transparent 24%),
+    rgba(16,30,24,.28);
+  backdrop-filter:blur(12px) saturate(118%);
+}
+
+.app-manage-view .store-detail-dialog{
+  position:relative;
+  z-index:1;
+  width:min(920px,100%);
+  min-height:min(720px,calc(100dvh - 48px));
+  max-height:min(980px,calc(100dvh - 48px));
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr);
+  border:1px solid rgba(255,255,255,.72);
+  border-radius:30px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.86), rgba(244,249,246,.72)),
+    radial-gradient(circle at top right, rgba(191,224,255,.24), transparent 28%);
+  box-shadow:
+    0 28px 90px rgba(12,26,20,.24),
+    inset 0 1px 0 rgba(255,255,255,.72);
+  overflow:hidden;
+  backdrop-filter:blur(28px) saturate(135%);
+}
+
+.app-manage-view .store-detail-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  padding:18px 20px 16px;
+  border-bottom:1px solid rgba(31,57,44,.08);
+  background:linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,.1));
+}
+
+.app-manage-view .store-detail-copy{
+  min-width:0;
+}
+
+.app-manage-view .store-detail-kicker{
+  display:block;
+  color:var(--store-muted);
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+
+.app-manage-view .store-detail-title{
+  margin:6px 0 0;
+  font-size:22px;
+  line-height:1.06;
+  letter-spacing:-.03em;
+}
+
+.app-manage-view .store-detail-subtitle{
+  margin:6px 0 0;
+  color:var(--store-muted);
+  font-size:13px;
+}
+
+.app-manage-view .store-detail-close{
+  width:42px;
+  min-width:42px;
+  min-height:42px;
+  padding:0;
+  border:1px solid rgba(31,57,44,.1);
+  border-radius:14px;
+  background:rgba(255,255,255,.62);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.68);
+  backdrop-filter:blur(10px);
+}
+
+.app-manage-view .store-detail-close:hover{
+  box-shadow:
+    0 10px 22px rgba(17,34,26,.1),
+    inset 0 1px 0 rgba(255,255,255,.72);
+}
+
+.app-manage-view .store-detail-body{
+  position:relative;
+  min-height:0;
+  background:linear-gradient(180deg, rgba(248,251,255,.42), rgba(241,246,243,.22));
+}
+
+.app-manage-view .store-detail-frame{
+  width:100%;
+  height:100%;
+  border:0;
+  background:rgba(255,255,255,.74);
+}
+
+.app-manage-view .store-detail-loading,
+.app-manage-view .store-detail-error{
+  position:absolute;
+  inset:0;
+  display:grid;
+  place-items:center;
+  padding:24px;
+}
+
+.app-manage-view .store-detail-loading-card,
+.app-manage-view .store-detail-error-card{
+  width:min(420px,100%);
+  padding:22px 20px;
+  border:1px solid rgba(255,255,255,.72);
+  border-radius:24px;
+  background:rgba(255,255,255,.58);
+  box-shadow:0 18px 42px rgba(17,34,26,.08);
+  backdrop-filter:blur(18px);
+  text-align:left;
+}
+
+.app-manage-view .store-detail-loading-card strong,
+.app-manage-view .store-detail-error-card strong{
+  display:block;
+  font-size:17px;
+}
+
+.app-manage-view .store-detail-loading-card p,
+.app-manage-view .store-detail-error-card p{
+  margin:8px 0 0;
+  color:var(--store-muted);
+  font-size:14px;
+}
+
+.app-manage-view .store-detail-spinner{
+  width:26px;
+  height:26px;
+  margin-bottom:14px;
+  border:3px solid rgba(29,138,103,.14);
+  border-top-color:var(--store-accent);
+  border-radius:50%;
+  animation:store-detail-spin .88s linear infinite;
+}
+
+.app-manage-view .store-detail-error-actions{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin-top:16px;
+}
+
+.app-manage-view .store-sr-only{
+  position:absolute;
+  width:1px;
+  height:1px;
+  padding:0;
+  margin:-1px;
+  overflow:hidden;
+  clip:rect(0,0,0,0);
+  white-space:nowrap;
+  border:0;
+}
+
+.app-manage-view button:focus-visible{
+  outline:3px solid rgba(29,138,103,.24);
+  outline-offset:2px;
+}
+
+@keyframes store-card-in{
+  from{
+    opacity:0;
+    transform:translateY(10px);
+  }
+  to{
+    opacity:1;
+    transform:translateY(0);
+  }
+}
+
+@keyframes store-detail-spin{
+  to{
+    transform:rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion:reduce){
+  .app-manage-view *,
+  .app-manage-view *::before,
+  .app-manage-view *::after{
+    animation:none !important;
+    transition:none !important;
+    scroll-behavior:auto !important;
+  }
+}
+
+@media (max-width:760px){
+  .app-manage-view .store-hero{
+    flex-direction:column;
+    align-items:stretch;
+  }
+
+  .app-manage-view .store-hero-side{
+    flex-basis:auto;
+  }
+}
+
+@media (max-width:560px){
+  .app-manage-view .store-shell{
+    width:min(100% - 8px,1120px);
+    padding:8px 0 12px;
+  }
+
+  .app-manage-view .store-board{
+    padding:18px 16px 20px;
+    border-radius:22px;
+  }
+
+  .app-manage-view .store-topbar{
+    align-items:center;
+    flex-direction:row;
+    gap:8px;
+    margin-bottom:12px;
+  }
+
+  .app-manage-view .store-topbar-title{
+    gap:10px;
+  }
+
+  .app-manage-view .store-topbar-actions{
+    width:100%;
+    justify-content:space-between;
+  }
+
+  .app-manage-view .store-source-field{
+    width:100%;
+    flex:1 1 100%;
+  }
+
+  .app-manage-view .store-source-input{
+    width:100%;
+    min-width:0;
+  }
+
+  .app-manage-view .store-brand-mark{
+    width:38px;
+    height:38px;
+    border-radius:14px;
+    font-size:14px;
+  }
+
+  .app-manage-view .store-topbar-copy span{
+    font-size:11px;
+  }
+
+  .app-manage-view .store-topbar-copy strong{
+    font-size:16px;
+  }
+
+  .app-manage-view .store-hero{
+    gap:12px;
+    padding:14px;
+    border-radius:20px;
+    margin-bottom:14px;
+  }
+
+  .app-manage-view .store-hero-main{
+    flex-direction:row;
+    align-items:center;
+    gap:12px;
+  }
+
+  .app-manage-view .store-hero-side-actions{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px;
+  }
+
+  .app-manage-view .store-hero-icon{
+    width:62px;
+    height:62px;
+    flex-basis:62px;
+    border-radius:16px;
+    font-size:20px;
+  }
+
+  .app-manage-view .store-hero h1{
+    margin-top:6px;
+    font-size:22px;
+    line-height:1.04;
+  }
+
+  .app-manage-view .store-hero-copy p{
+    margin-top:6px;
+    font-size:13px;
+    max-width:none;
+  }
+
+  .app-manage-view .store-eyebrow{
+    min-height:28px;
+    padding:0 10px;
+    font-size:11px;
+  }
+
+  .app-manage-view .store-hero-side{
+    gap:10px;
+    padding:12px;
+    border-radius:18px;
+  }
+
+  .app-manage-view .store-hero-side-copy strong{
+    font-size:16px;
+  }
+
+  .app-manage-view .store-hero-side-copy p{
+    font-size:12px;
+  }
+
+  .app-manage-view .store-toolbar{
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    overflow-y:hidden;
+    padding-bottom:3px;
+    margin:0 0 14px;
+    -ms-overflow-style:none;
+    scrollbar-width:none;
+    touch-action:pan-x;
+    gap:7px;
+  }
+
+  .app-manage-view .store-tab{
+    flex:0 0 auto;
+    min-height:40px;
+    padding:0 14px;
+    font-size:15px;
+  }
+
+  .app-manage-view .store-section-head{
+    margin-bottom:18px;
+    padding-top:8px;
+  }
+
+  .app-manage-view .store-section-head h2{
+    font-size:22px;
+  }
+
+  .app-manage-view .store-apps{
+    grid-template-columns:1fr;
+    gap:14px;
+    padding:2px 0 6px;
+  }
+
+  .app-manage-view .store-app-card{
+    gap:12px;
+    padding:14px;
+    border-radius:18px;
+  }
+
+  .app-manage-view .store-detail-modal{
+    padding:10px;
+  }
+
+  .app-manage-view .store-detail-dialog{
+    min-height:min(620px,calc(100dvh - 20px));
+    max-height:min(860px,calc(100dvh - 20px));
+    border-radius:22px;
+  }
+
+  .app-manage-view .store-detail-head{
+    padding:14px;
+  }
+
+  .app-manage-view .store-detail-title{
+    font-size:18px;
+  }
+
+  .app-manage-view .store-detail-subtitle{
+    font-size:12px;
+  }
+
+  .app-manage-view .store-detail-close{
+    width:38px;
+    min-width:38px;
+    min-height:38px;
+    border-radius:12px;
+  }
+
+  .app-manage-view .store-app-head{
+    flex-direction:row;
+    align-items:center;
+    gap:12px;
+  }
+
+  .app-manage-view .store-app-icon{
+    width:56px;
+    height:56px;
+    flex-basis:56px;
+    border-radius:15px;
+    font-size:18px;
+  }
+
+  .app-manage-view .store-app-summary{
+    gap:8px;
+  }
+
+  .app-manage-view .store-app-copy h3{
+    font-size:15px;
+    line-height:1.08;
+  }
+
+  .app-manage-view .store-app-copy p{
+    margin-top:4px;
+    font-size:12px;
+  }
+
+  .app-manage-view .store-app-actions{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    align-items:stretch;
+    gap:8px;
+  }
+
+  .app-manage-view .store-btn{
+    width:100%;
+    min-height:40px;
+    padding:0 12px;
+    border-radius:13px;
+    font-size:15px;
+  }
+
+  .app-manage-view .store-btn-compact{
+    min-height:36px;
+    padding:0 10px;
+    font-size:13px;
+  }
+
+  .app-manage-view .store-count-pill{
+    min-height:32px;
+    padding:0 10px;
+    font-size:11px;
+  }
+
+  .app-manage-view .store-tag{
+    min-height:24px;
+    padding:0 8px;
+    font-size:10px;
+  }
+
+  .app-manage-view .store-shell{
+    width:100%;
+    padding:0;
+  }
+
+  .app-manage-view .store-board{
+    min-height:100dvh;
+    padding:14px 12px 18px;
+    border:0;
+    border-radius:0;
+    box-shadow:none;
+  }
+
+  .app-manage-view .store-topbar{
+    display:block;
+    margin-bottom:10px;
+  }
+
+  .app-manage-view .store-source-field,
+  .app-manage-view .store-hero{
+    display:none;
+  }
+
+  .app-manage-view .store-topbar-title{
+    display:block;
+    margin-bottom:10px;
+  }
+
+  .app-manage-view .store-brand-mark,
+  .app-manage-view .store-topbar-copy span{
+    display:none;
+  }
+
+  .app-manage-view .store-topbar-copy strong{
+    display:block;
+    font-size:24px;
+    line-height:1.08;
+    letter-spacing:-.03em;
+  }
+
+  .app-manage-view .store-topbar-actions{
+    display:block;
+    gap:8px;
+    width:100%;
+    justify-content:stretch;
+  }
+
+  .app-manage-view #refreshStoreBtn,
+  .app-manage-view #updateStoreBtn,
+  .app-manage-view #storeAppCount{
+    display:none;
+  }
+
+  .app-manage-view #backFromAppManageBtn{
+    width:100%;
+  }
+
+  .app-manage-view .store-toolbar{
+    width:calc(100% + 24px);
+    margin:0 -12px 12px;
+    padding:0 12px 4px;
+  }
+
+  .app-manage-view .store-section-head{
+    margin-bottom:12px;
+    padding-top:4px;
+  }
+
+  .app-manage-view .store-section-head h2{
+    font-size:21px;
+  }
+
+  .app-manage-view .store-apps{
+    gap:10px;
+    padding:0 0 6px;
+  }
+
+  .app-manage-view .store-app-card{
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:center;
+    gap:10px;
+    padding:10px 12px;
+    border-radius:16px;
+  }
+
+  .app-manage-view .store-app-head{
+    gap:10px;
+    min-width:0;
+  }
+
+  .app-manage-view .store-app-icon{
+    width:46px;
+    height:46px;
+    flex-basis:46px;
+    border-radius:13px;
+    font-size:16px;
+  }
+
+  .app-manage-view .store-app-summary{
+    min-width:0;
+    gap:5px;
+  }
+
+  .app-manage-view .store-app-copy h3,
+  .app-manage-view .store-app-copy p{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  .app-manage-view .store-app-copy p{
+    margin-top:3px;
+  }
+
+  .app-manage-view .store-app-meta{
+    gap:6px;
+  }
+
+  .app-manage-view .store-app-actions{
+    display:flex;
+    flex-wrap:nowrap;
+    align-items:center;
+    justify-content:flex-end;
+    gap:6px;
+    min-width:max-content;
+  }
+
+  .app-manage-view .store-btn,
+  .app-manage-view .store-btn-compact{
+    min-height:34px;
+    padding:0 10px;
+    border-radius:12px;
+    font-size:13px;
+  }
+}
+
+@media (max-width:380px){
+  .app-manage-view .store-topbar{
+    align-items:flex-start;
+    flex-direction:column;
+  }
+
+  .app-manage-view .store-topbar-actions{
+    width:100%;
+    justify-content:space-between;
+  }
+
+  .app-manage-view .store-count-pill{
+    display:none;
+  }
+
+  .app-manage-view .store-hero{
+    padding:12px;
+  }
+
+  .app-manage-view .store-hero-main{
+    gap:12px;
+  }
+
+  .app-manage-view .store-hero-side-actions,
+  .app-manage-view .store-app-actions{
+    gap:6px;
+  }
+
+  .app-manage-view .store-btn{
+    font-size:13px;
+  }
+}
+</style>
+</head>
+<body>
+<main class="wifi-shell hidden" id="wifiView">
+  <section class="wifi-stage">
+    <section class="wifi-intro">
+      <div class="wifi-copy">
+        <div class="wifi-title-row">
+          <div class="wifi-brand" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <path d="M3.5 9.7a13.6 13.6 0 0 1 17 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              <path d="M6.8 13.2a8.7 8.7 0 0 1 10.4 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              <path d="M10.1 16.8a3.8 3.8 0 0 1 3.8 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              <circle cx="12" cy="19.5" r="1.35" fill="currentColor"/>
+            </svg>
+          </div>
+          <h1>WiFi 配置</h1>
+        </div>
+        <div class="wifi-pill" id="wifiPortalPill">Cubic Guest WiFi</div>
+      </div>
+    </section>
+    <section class="wifi-auth">
+      <section class="wifi-card" aria-labelledby="wifiSigninTitle">
+        <span class="visually-hidden" id="wifiSigninTitle">Cubic Guest WiFi</span>
+        <span class="visually-hidden" id="wifiSigninHint">请选择热点并输入密码</span>
+        <form id="wifiForm">
+          <span class="visually-hidden" id="wifiNetworkName">Cubic Guest WiFi</span>
+          <div class="wifi-form-field">
+            <label for="wifiSelect">选择热点</label>
+            <div class="wifi-input-row">
+              <div class="wifi-select-shell" id="wifiSignalWrap">
+                <svg class="wifi-signal-icon" id="wifiSignalIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path class="wifi-signal-high" d="M3.5 9.7a13.6 13.6 0 0 1 17 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <path class="wifi-signal-mid" d="M6.8 13.2a8.7 8.7 0 0 1 10.4 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <path class="wifi-signal-low" d="M10.1 16.8a3.8 3.8 0 0 1 3.8 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  <circle class="wifi-signal-dot" cx="12" cy="19.5" r="1.35" fill="currentColor"/>
+                </svg>
+                <select class="wifi-input wifi-select wifi-native-select" id="wifiSelect" name="ssid" autocomplete="off" tabindex="-1" aria-hidden="true">
+                  <option value="">等待扫描附近热点</option>
+                </select>
+                <button class="wifi-choice-trigger" id="wifiChoiceTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                  <span class="wifi-choice-text" id="wifiChoiceText">等待扫描附近热点</span>
+                  <span class="wifi-choice-caret" aria-hidden="true"></span>
+                </button>
+                <div class="wifi-choice-menu hidden" id="wifiChoiceMenu" role="listbox" aria-label="附近热点"></div>
+              </div>
+              <button class="wifi-inline-btn" id="wifiScanBtn" type="button">扫描</button>
+            </div>
+          </div>
+          <div class="wifi-form-field">
+            <label for="wifiPassword">输入密码</label>
+            <div class="wifi-input-wrap">
+              <input class="wifi-input" id="wifiPassword" name="password" type="password" placeholder="输入密码" autocomplete="current-password">
+              <button class="wifi-icon-btn" id="wifiPasswordToggle" type="button" aria-label="显示密码" aria-pressed="false" title="显示密码">
+                <svg id="wifiPasswordToggleIcon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M2.6 12s3.4-5.6 9.4-5.6 9.4 5.6 9.4 5.6-3.4 5.6-9.4 5.6S2.6 12 2.6 12Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                  <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="wifi-actions">
+            <button class="wifi-submit" id="wifiSubmit" type="submit">连接</button>
+            <button class="wifi-skip" id="skipWifiBtn" type="button">跳过</button>
+          </div>
+          <div class="wifi-status" id="wifiFormStatus" role="status" aria-live="polite"></div>
+        </form>
+      </section>
+    </section>
+  </section>
+</main>
+
+<div class="shell hidden" id="startView">
+  <div class="control-shell">
+    <header class="topbar">
+      <div class="topbar-meta">
+        <span class="eyebrow">Cubic Start</span>
+        <h1>设备控制面板</h1>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn ghost" id="exitBtn" type="button">返回启动器</button>
+      </div>
+    </header>
+
+    <section class="hero-card">
+      <div class="hero-copy">
+        <span class="section-kicker">当前使用</span>
+        <h2 id="runningApp">启动器</h2>
+        <span class="visually-hidden" id="routeBase">/main</span>
+      </div>
+      <div class="summary-grid">
+        <article class="summary-item">
+          <span>运行状态</span>
+          <div class="status-line">
+            <span class="badge neutral hidden" id="appStateBadge"></span>
+          </div>
+        </article>
+        <article class="summary-item">
+          <span>可用应用</span>
+          <strong id="appCount">0</strong>
+        </article>
+        <article class="summary-item">
+          <span>当前页面</span>
+          <strong id="currentWebui">主页面</strong>
+        </article>
+      </div>
+    </section>
+
+    <main class="dashboard-grid">
+      <section class="card apps-card">
+        <div class="card-head">
+          <div>
+            <span class="section-kicker">应用</span>
+            <h2>设备应用</h2>
+          </div>
+          <div class="toolbar">
+            <button class="btn secondary" id="installAppBtn" type="button">应用管理</button>
+          </div>
+        </div>
+        <div id="apps" class="apps-list"></div>
+      </section>
+
+      <div class="side-stack">
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <span class="section-kicker">服务</span>
+              <h2>设备服务</h2>
+            </div>
+            <div class="status-line">
+              <span class="badge neutral" id="serviceCount">0 个</span>
+              <button class="btn compact ghost" id="openServiceManageBtn" type="button">管理</button>
+            </div>
+          </div>
+          <div id="services" class="apps-list"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <span class="section-kicker">网络</span>
+              <h2>连接状态</h2>
+            </div>
+            <div class="status-line">
+              <span class="badge neutral" id="wifiStateBadge">检测中</span>
+              <button class="btn compact ghost" id="openWifiSetupBtn" type="button">回到配网</button>
+            </div>
+          </div>
+          <div class="network-grid">
+            <div class="metric">
+              <span>网络状态</span>
+              <strong id="wifiIp">-</strong>
+            </div>
+            <div class="metric">
+              <span>访问地址</span>
+              <strong id="wifiMdns">-</strong>
+            </div>
+            <div class="metric">
+              <span>已连接 WiFi</span>
+              <strong id="wifiStateText">在线</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <div>
+              <span class="section-kicker">设置</span>
+              <h2>常用设置</h2>
+            </div>
+            <span class="badge neutral">保存到设备</span>
+          </div>
+          <form id="settingsForm" class="settings-form">
+            <div class="settings-grid">
+              <label class="field" for="timezoneSelect">
+                <span>时区</span>
+                <select id="timezoneSelect" name="timezone">
+                  <option value="CST-8">CST-8</option>
+                  <option value="UTC0">UTC0</option>
+                  <option value="JST-9">JST-9</option>
+                  <option value="EST5EDT,M3.2.0/2,M11.1.0/2">EST5EDT</option>
+                  <option value="PST8PDT,M3.2.0/2,M11.1.0/2">PST8PDT</option>
+                </select>
+              </label>
+              <label class="field" for="weatherAddress">
+                <span>天气地址</span>
+                <input id="weatherAddress" name="weatherAddress" type="text" placeholder="Shanghai / Tokyo">
+              </label>
+            </div>
+            <span class="visually-hidden" id="settingsRoute">/main</span>
+            <div class="settings-actions">
+              <button class="btn primary" id="saveSettings" type="submit">保存</button>
+              <button class="btn ghost" id="resetSettings" type="button">恢复默认</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card resource-card">
+          <div class="card-head">
+            <div>
+              <span class="section-kicker">资源</span>
+              <h2>图像资源</h2>
+            </div>
+            <button class="btn compact ghost" id="openImageManageBtn" type="button">进入管理</button>
+          </div>
+          <div class="resource-grid">
+            <div class="metric">
+              <span>静态图片</span>
+              <strong id="imageAssetCount">0</strong>
+            </div>
+            <div class="metric">
+              <span>GIF 动画</span>
+              <strong id="gifAssetCount">0</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="card firmware-update-card">
+          <div class="card-head">
+            <div>
+              <span class="section-kicker">系统</span>
+              <h2>系统更新</h2>
+            </div>
+            <span class="badge neutral" id="firmwareUpdateBadge">检测中</span>
+          </div>
+          <div class="firmware-grid">
+            <div class="metric">
+              <span>当前版本</span>
+              <strong id="firmwareCurrentVersion">-</strong>
+            </div>
+            <div class="metric">
+              <span>最新版本</span>
+              <strong id="firmwareLatestVersion">-</strong>
+            </div>
+          </div>
+          <p class="firmware-note" id="firmwareUpdateNote">等待检查更新。</p>
+          <div class="firmware-progress" aria-hidden="true">
+            <span class="firmware-progress-fill" id="firmwareProgressFill"></span>
+          </div>
+          <div class="firmware-actions">
+            <button class="btn ghost" id="checkFirmwareBtn" type="button">检查更新</button>
+            <button class="btn primary" id="startFirmwareUpdateBtn" type="button" disabled>安装更新</button>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="shell hidden app-manage-view" id="appManageView">
+  <main class="store-shell">
+    <section class="store-board">
+      <header class="store-topbar">
+        <div class="store-topbar-title">
+          <div class="store-brand-mark" aria-hidden="true">AP</div>
+          <div class="store-topbar-copy">
+            <span>App Store</span>
+            <strong>应用商店</strong>
+          </div>
+        </div>
+        <div class="store-topbar-actions">
+          <label class="store-source-field" for="storeServerUrl">
+            <span>应用目录地址</span>
+            <input class="store-source-input" id="storeServerUrl" type="url" placeholder="http://192.168.0.80:8080">
+          </label>
+          <button class="store-btn store-btn-soft store-btn-compact" id="refreshStoreBtn" type="button">刷新目录</button>
+          <button class="store-btn store-btn-soft store-btn-compact" id="updateStoreBtn" type="button">更新</button>
+          <div class="store-count-pill" id="storeAppCount">0 个项目</div>
+          <button class="store-btn store-btn-soft store-btn-compact" id="backFromAppManageBtn" type="button">返回启动器</button>
+        </div>
+      </header>
+
+      <section class="store-hero" aria-labelledby="storeHeroTitle">
+        <div class="store-hero-main">
+          <div class="store-hero-icon store-app-icon store-theme-green" aria-hidden="true">AP</div>
+          <div class="store-hero-copy">
+            <div class="store-eyebrow">设备安装</div>
+            <h1 id="storeHeroTitle">安装应用和服务</h1>
+            <p>填写应用目录地址后刷新列表，选择需要的应用即可安装、更新或卸载。</p>
+          </div>
+        </div>
+        <div class="store-hero-side">
+          <div class="store-hero-side-copy">
+            <span>目录状态</span>
+            <strong id="storeServerHost">未配置</strong>
+            <p class="store-status-text" id="storeStatusText">填写应用目录地址后点击“刷新目录”。</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="store-toolbar" role="tablist" aria-label="应用分类">
+        <button class="store-tab active" type="button" data-filter="all" aria-pressed="true">全部</button>
+        <button class="store-tab" type="button" data-filter="installed" aria-pressed="false">已安装</button>
+        <button class="store-tab" type="button" data-filter="available" aria-pressed="false">可安装</button>
+        <button class="store-tab" type="button" data-filter="service" aria-pressed="false">服务</button>
+        <button class="store-tab" type="button" data-filter="launcher" aria-pressed="false">启动器</button>
+        <button class="store-tab" type="button" data-filter="weather" aria-pressed="false">天气</button>
+        <button class="store-tab" type="button" data-filter="time" aria-pressed="false">时间</button>
+      </div>
+
+      <section aria-labelledby="storeAppsTitle">
+        <div class="store-section-head">
+          <div>
+            <span>Collection</span>
+            <h2 id="storeAppsTitle">应用列表</h2>
+          </div>
+        </div>
+
+        <div class="store-apps" id="storeAppGrid"></div>
+
+        <div class="store-empty is-hidden" id="storeEmptyState" aria-live="polite">
+          当前没有可显示的应用
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div class="store-detail-modal is-hidden" id="storeDetailModal" aria-hidden="true">
+    <div class="store-detail-backdrop" data-close-store-detail="true"></div>
+    <section class="store-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="storeDetailTitle">
+      <header class="store-detail-head">
+        <div class="store-detail-copy">
+          <span class="store-detail-kicker">应用介绍</span>
+          <h2 class="store-detail-title" id="storeDetailTitle">应用详情</h2>
+          <p class="store-detail-subtitle" id="storeDetailSubtitle">正在载入应用说明页。</p>
+        </div>
+        <button class="store-btn store-btn-soft store-detail-close" id="storeDetailCloseBtn" type="button" aria-label="关闭详情">
+          ×
+        </button>
+      </header>
+      <div class="store-detail-body">
+        <iframe class="store-detail-frame" id="storeDetailFrame" title="应用详情页" loading="lazy"></iframe>
+        <div class="store-detail-loading" id="storeDetailLoading" aria-live="polite">
+          <div class="store-detail-loading-card">
+            <div class="store-detail-spinner" aria-hidden="true"></div>
+            <strong>正在加载详情页</strong>
+            <p>正在打开应用介绍。</p>
+          </div>
+        </div>
+        <div class="store-detail-error is-hidden" id="storeDetailError" aria-live="polite">
+          <div class="store-detail-error-card">
+            <strong>详情页暂时无法显示</strong>
+            <p id="storeDetailErrorText">请稍后重试，或检查介绍页地址是否可访问。</p>
+            <div class="store-detail-error-actions">
+              <button class="store-btn store-btn-soft store-btn-compact" id="storeDetailRetryBtn" type="button">重试</button>
+              <a class="store-btn store-btn-soft store-btn-compact" id="storeDetailOpenLink" href="#" target="_blank" rel="noreferrer noopener">新窗口打开</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="shell hidden" id="imageManageView">
+  <div class="control-shell">
+    <header class="topbar">
+      <div class="topbar-meta">
+        <span class="eyebrow">资源管理</span>
+        <h1>图像管理</h1>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn ghost" id="backToStartBtn" type="button">返回控制面板</button>
+        <button class="btn secondary" id="refreshMediaBtn" type="button">刷新列表</button>
+      </div>
+    </header>
+
+    <section class="hero-card media-hero">
+      <div class="media-summary">
+        <div class="hero-copy">
+          <span class="section-kicker">设备资源</span>
+          <h2>把常用图片和动画集中管理</h2>
+        </div>
+        <span class="media-usage" id="mediaUsageSize">已占用 0 B</span>
+        <div class="media-status" id="mediaLibraryStatus">正在同步资源。</div>
+      </div>
+
+      <div class="media-upload-grid">
+        <section class="upload-card">
+          <span class="section-kicker">静态图片</span>
+          <h3>上传图片</h3>
+          <p>PNG / JPG / WEBP / BMP / SVG，静态图会自动适配 320×240</p>
+          <button class="btn primary" id="pickImageUploadBtn" type="button">选择图片</button>
+          <input class="visually-hidden" id="imageUploadInput" type="file" accept=".png,.jpg,.jpeg,.bmp,.webp,.svg,image/png,image/jpeg,image/bmp,image/webp,image/svg+xml" multiple>
+        </section>
+        <section class="upload-card gif">
+          <span class="section-kicker">GIF 动画</span>
+          <h3>上传 GIF</h3>
+          <p>仅 GIF</p>
+          <button class="btn secondary" id="pickGifUploadBtn" type="button">选择 GIF</button>
+          <input class="visually-hidden" id="gifUploadInput" type="file" accept=".gif,image/gif" multiple>
+        </section>
+      </div>
+    </section>
+
+    <main class="media-page-grid">
+      <section class="card media-section">
+        <div class="media-library-head">
+          <div>
+            <span class="section-kicker" id="mediaLibraryKicker">图片</span>
+            <h2 id="mediaLibraryTitle">静态图片</h2>
+          </div>
+          <div class="media-switch" role="tablist" aria-label="资源类型">
+            <button class="media-switch-btn active" id="showImagesBtn" type="button" role="tab" aria-selected="true">图片</button>
+            <button class="media-switch-btn" id="showGifsBtn" type="button" role="tab" aria-selected="false">GIF</button>
+          </div>
+        </div>
+        <div class="media-grid" id="mediaImageGrid"></div>
+        <div class="media-grid hidden" id="mediaGifGrid"></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div id="toast" aria-live="polite"></div>
+
+<script>
+const qs = (sel) => document.querySelector(sel);
+const DEFAULT_MDNS = "-";
+const DEFAULT_TIMEZONE = "CST-8";
+const DEFAULT_APP_STORE_CHANNEL = "stable";
+const SETTINGS_JSON_PATH = "/sd/apps/settings.json";
+const WIFI_SKIP_KEY = "cubic.skipWifiGate";
+const WIFI_SUCCESS_REDIRECT_DELAY_MS = 3000;
+const MAX_MEDIA_UPLOAD_BYTES = 64 * 1024 * 1024;
+const MEDIA_UPLOAD_MAX_WIDTH = 320;
+const MEDIA_UPLOAD_MAX_HEIGHT = 240;
+const STORAGE_KEYS = {
+  timezone: "cubic.mainpage.timezone",
+  weatherAddress: "cubic.mainpage.weatherAddress",
+  appStoreUrl: "cubic.mainpage.appStoreUrl"
+};
+let toastTimer = 0;
+let latestSystemState = null;
+let wifiScanRequested = false;
+let selectedWifiSsid = "";
+let currentView = "start";
+let activeMediaKind = "image";
+let mediaLibrary = { images: [], gifs: [] };
+let mediaRefreshToken = Date.now();
+const appBmpIconCache = new Map();
+let appCardsSignature = "";
+let serviceCardsSignature = "";
+let storeCatalog = [];
+let storeCurrentFilter = "all";
+let refreshAppStoreCatalog = null;
+let syncAppStoreInstallButtons = null;
+let appInstallStatePrimed = false;
+let appInstallStartedFromPage = false;
+const appInstallLocalAppIds = new Set();
+const handledAppInstallSeqs = new Set();
+let appInstallCatalogSyncPending = false;
+let firmwareCheckBusy = false;
+let firmwareUpdateBusy = false;
+let wifiSuccessNoticeKey = "";
+let wifiSuccessRedirectTimer = 0;
+
+function showToast(text, isError, durationMs){
+  const el = qs("#toast");
+  el.textContent = text;
+  el.style.background = isError ? "#8f3041" : "#183a63";
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  const delay = Math.max(800, Number(durationMs || 2600));
+  toastTimer = setTimeout(() => el.classList.remove("show"), delay);
+}
+
+async function api(path, init){
+  const res = await fetch(path, Object.assign({ cache: "no-store" }, init || {}));
+  let data = null;
+  try{
+    data = await res.json();
+  }catch(err){
+    throw new Error("system api 返回了无效数据");
+  }
+  if(!res.ok || data.ok === false){
+    throw new Error(data && data.error ? data.error : ("HTTP " + res.status));
+  }
+  return data;
+}
+
+async function uploadMediaFile(kind, file){
+  const fsPath = (kind === "gif" ? "/sd/gifs/" : "/sd/images/") + (file.name || "");
+  const response = await fetch(
+    "/api/system/fs/upload?path=" + encodeURIComponent(fsPath),
+    {
+      method: "PUT",
+      cache: "no-store",
+      body: file
+    }
+  );
+  let data = null;
+  try{
+    data = await response.json();
+  }catch(err){
+    throw new Error("media api 返回了无效数据");
+  }
+  if(!response.ok || data.ok === false){
+    throw new Error(data && data.error ? data.error : ("HTTP " + response.status));
+  }
+  return data;
+}
+
+async function readDevtoolsTextFile(path, maxBytes){
+  const limit = Math.max(1024, Number(maxBytes || 262144));
+  const chunkSize = Math.min(65536, limit);
+  let offset = 0;
+  const chunks = [];
+  let total = 0;
+  while(offset < limit){
+    const res = await fetch(
+      "/devtools/api/read?path=" + encodeURIComponent(String(path || "")) +
+      "&offset=" + offset +
+      "&size=" + chunkSize,
+      { cache: "no-store" }
+    );
+    if(!res.ok){
+      throw new Error("HTTP " + res.status);
+    }
+    const chunk = new Uint8Array(await res.arrayBuffer());
+    if(!chunk.length){
+      break;
+    }
+    chunks.push(chunk);
+    total += chunk.length;
+    if(total > limit){
+      throw new Error("文件过大");
+    }
+    if(res.headers.get("x-eof") === "1"){
+      break;
+    }
+    const next = Number(res.headers.get("x-next-offset"));
+    offset = Number.isFinite(next) && next > offset ? next : offset + chunk.length;
+  }
+  const bytes = new Uint8Array(total);
+  let cursor = 0;
+  chunks.forEach((chunk) => {
+    bytes.set(chunk, cursor);
+    cursor += chunk.length;
+  });
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+function escapeHtml(value){
+  return String(value || "").replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[ch]);
+}
+
+async function uploadJsonFile(path, payload){
+  const text = JSON.stringify(payload || {}, null, 2);
+  const response = await fetch(
+    "/api/system/fs/upload?path=" + encodeURIComponent(String(path || "")),
+    {
+      method: "PUT",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: text
+    }
+  );
+  let data = null;
+  try{
+    data = await response.json();
+  }catch(err){
+    throw new Error("文件保存接口返回了无效数据");
+  }
+  if(!response.ok || data.ok === false){
+    throw new Error(data && data.error ? data.error : ("HTTP " + response.status));
+  }
+  return data;
+}
+
+function looksLikeIp(host){
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(String(host || ""));
+}
+
+function storageGet(key, fallback){
+  try{
+    const value = window.localStorage.getItem(key);
+    return value === null ? fallback : value;
+  }catch(err){
+    return fallback;
+  }
+}
+
+function storageSet(key, value){
+  try{ window.localStorage.setItem(key, value); }catch(err){}
+}
+
+function storageRemove(key){
+  try{ window.localStorage.removeItem(key); }catch(err){}
+}
+
+function sessionGet(key){
+  try{ return window.sessionStorage.getItem(key); }catch(err){ return null; }
+}
+
+function sessionSet(key, value){
+  try{ window.sessionStorage.setItem(key, value); }catch(err){}
+}
+
+function sessionRemove(key){
+  try{ window.sessionStorage.removeItem(key); }catch(err){}
+}
+
+function setView(mode){
+  currentView = mode;
+  qs("#wifiView").classList.toggle("hidden", mode !== "wifi");
+  qs("#startView").classList.toggle("hidden", mode !== "start");
+  qs("#appManageView").classList.toggle("hidden", mode !== "appmanage");
+  qs("#imageManageView").classList.toggle("hidden", mode !== "images");
+}
+
+function isPinnedSubView(){
+  return currentView === "images" || currentView === "appmanage";
+}
+
+function clearForcedWifiView(){
+  const url = new URL(window.location.href);
+  if(url.searchParams.get("view") !== "wifi"){
+    return;
+  }
+  url.searchParams.delete("view");
+  window.history.replaceState(null, "", url.pathname + (url.search ? url.search : "") + url.hash);
+}
+
+function forceWifiView(){
+  const url = new URL(window.location.href);
+  if(url.searchParams.get("view") !== "wifi"){
+    url.searchParams.set("view", "wifi");
+    window.history.replaceState(null, "", url.pathname + (url.search ? url.search : "") + url.hash);
+  }
+}
+
+function ensureTimezoneOption(value){
+  const select = qs("#timezoneSelect");
+  if(!value){
+    return;
+  }
+  const exists = Array.from(select.options).some((option) => option.value === value);
+  if(exists){
+    return;
+  }
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = value;
+  select.appendChild(option);
+}
+
+function loadStoredSettings(){
+  const timezone = storageGet(STORAGE_KEYS.timezone, DEFAULT_TIMEZONE);
+  const weatherAddress = storageGet(STORAGE_KEYS.weatherAddress, "");
+  ensureTimezoneOption(timezone);
+  qs("#timezoneSelect").value = timezone;
+  qs("#weatherAddress").value = weatherAddress;
+}
+
+function setBadgeState(sel, tone, text){
+  const badge = qs(sel);
+  const content = String(text || "");
+  badge.className = "badge " + tone + (content ? "" : " hidden");
+  badge.textContent = content;
+}
+
+function escapeAttr(text){
+  return String(text || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function sortMediaEntries(list){
+  return (Array.isArray(list) ? list.slice() : []).sort((a, b) => {
+    const left = String(a && a.name || "");
+    const right = String(b && b.name || "");
+    return left.localeCompare(right, "zh-Hans-CN", { numeric: true, sensitivity: "base" });
+  });
+}
+
+function formatBytes(size){
+  const value = Number(size);
+  if(!Number.isFinite(value) || value < 0){
+    return "-";
+  }
+  if(value < 1024){
+    return value + " B";
+  }
+  if(value < 1024 * 1024){
+    return (value / 1024).toFixed(value < 10 * 1024 ? 1 : 0) + " KB";
+  }
+  return (value / (1024 * 1024)).toFixed(value < 10 * 1024 * 1024 ? 1 : 0) + " MB";
+}
+
+function mediaKindLabel(kind){
+  return kind === "gif" ? "GIF" : "图片";
+}
+
+function mediaTypeLabel(entry){
+  const mime = String(entry && entry.mime || "");
+  if(mime.indexOf("image/") === 0){
+    return mime.slice(6).toUpperCase();
+  }
+  const name = String(entry && entry.name || "");
+  const match = name.match(/\.([^.]+)$/);
+  return match ? match[1].toUpperCase() : mediaKindLabel(entry && entry.kind);
+}
+
+function mediaPreviewUrl(path){
+  return "/api/system/fs/file?path=" + encodeURIComponent(String(path || "")) + "&t=" + String(mediaRefreshToken);
+}
+
+function mediaEntriesForKind(kind){
+  return kind === "gif" ? mediaLibrary.gifs : mediaLibrary.images;
+}
+
+function mediaGridSelectorForKind(kind){
+  return kind === "gif" ? "#mediaGifGrid" : "#mediaImageGrid";
+}
+
+function syncMediaGridVisibility(){
+  const showGif = activeMediaKind === "gif";
+  qs("#mediaImageGrid").classList.toggle("hidden", showGif);
+  qs("#mediaGifGrid").classList.toggle("hidden", !showGif);
+}
+
+function mediaFileExtension(name){
+  const match = String(name || "").match(/\.([^.]+)$/);
+  return match ? match[1].toLowerCase() : "";
+}
+
+function replaceMediaFileExtension(name, nextExt){
+  const source = String(name || "image");
+  const base = source.replace(/\.[^.]+$/, "");
+  return base + "." + nextExt;
+}
+
+function resolveRasterUploadOutput(file){
+  const ext = mediaFileExtension(file && file.name);
+  if(ext === "svg"){
+    return null;
+  }
+  if(ext === "jpg" || ext === "jpeg"){
+    return { type: "image/jpeg", ext: ext };
+  }
+  if(ext === "png"){
+    return { type: "image/png", ext: "png" };
+  }
+  if(ext === "webp"){
+    return { type: "image/webp", ext: "webp" };
+  }
+  if(ext === "bmp"){
+    return { type: "image/png", ext: "png" };
+  }
+
+  const mime = String(file && file.type || "").toLowerCase();
+  if(mime === "image/jpeg"){
+    return { type: "image/jpeg", ext: "jpg" };
+  }
+  if(mime === "image/png"){
+    return { type: "image/png", ext: "png" };
+  }
+  if(mime === "image/webp"){
+    return { type: "image/webp", ext: "webp" };
+  }
+  if(mime === "image/bmp" || mime === "image/x-ms-bmp"){
+    return { type: "image/png", ext: "png" };
+  }
+  return null;
+}
+
+function loadImageElementFromFile(file){
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    const cleanup = () => URL.revokeObjectURL(url);
+    image.decoding = "async";
+    image.onload = () => {
+      cleanup();
+      resolve(image);
+    };
+    image.onerror = () => {
+      cleanup();
+      reject(new Error((file && file.name ? file.name : "图片") + " 读取失败"));
+    };
+    image.src = url;
+  });
+}
+
+function fitMediaUploadSize(width, height){
+  let scale = 1;
+  if(width >= height){
+    scale = Math.min(scale, MEDIA_UPLOAD_MAX_WIDTH / width);
+  }else{
+    scale = Math.min(scale, MEDIA_UPLOAD_MAX_HEIGHT / height);
+  }
+  scale = Math.min(scale, MEDIA_UPLOAD_MAX_WIDTH / width, MEDIA_UPLOAD_MAX_HEIGHT / height, 1);
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale))
+  };
+}
+
+function canvasToBlob(canvas, type){
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob || null), type);
+  });
+}
+
+async function prepareImageFileForUpload(file){
+  const output = resolveRasterUploadOutput(file);
+  if(!output){
+    return { file, changed: false };
+  }
+
+  const image = await loadImageElementFromFile(file);
+  const sourceWidth = Number(image.naturalWidth || image.width || 0);
+  const sourceHeight = Number(image.naturalHeight || image.height || 0);
+  if(!sourceWidth || !sourceHeight){
+    throw new Error((file && file.name ? file.name : "图片") + " 尺寸无效");
+  }
+
+  const target = fitMediaUploadSize(sourceWidth, sourceHeight);
+  if(target.width === sourceWidth && target.height === sourceHeight){
+    return {
+      file,
+      changed: false,
+      width: sourceWidth,
+      height: sourceHeight
+    };
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = target.width;
+  canvas.height = target.height;
+  const ctx = canvas.getContext("2d");
+  if(!ctx){
+    throw new Error("浏览器不支持图片缩放");
+  }
+  ctx.imageSmoothingEnabled = true;
+  if("imageSmoothingQuality" in ctx){
+    ctx.imageSmoothingQuality = "high";
+  }
+  ctx.clearRect(0, 0, target.width, target.height);
+  ctx.drawImage(image, 0, 0, target.width, target.height);
+
+  let outputType = output.type;
+  let outputExt = output.ext;
+  let blob = await canvasToBlob(canvas, outputType);
+  if(!blob && outputType !== "image/png"){
+    outputType = "image/png";
+    outputExt = "png";
+    blob = await canvasToBlob(canvas, outputType);
+  }
+  if(!blob){
+    throw new Error((file && file.name ? file.name : "图片") + " 缩放失败");
+  }
+
+  const originalExt = mediaFileExtension(file && file.name);
+  const outputName = outputExt === originalExt
+    ? String(file && file.name || "image." + outputExt)
+    : replaceMediaFileExtension(file && file.name, outputExt);
+
+  return {
+    file: new File([blob], outputName, {
+      type: outputType,
+      lastModified: Number(file && file.lastModified) || Date.now()
+    }),
+    changed: true,
+    width: target.width,
+    height: target.height,
+    originalWidth: sourceWidth,
+    originalHeight: sourceHeight
+  };
+}
+
+function setMediaStatus(text, isError){
+  const node = qs("#mediaLibraryStatus");
+  node.textContent = text;
+  node.classList.toggle("error", !!isError);
+}
+
+function setMediaToolbarBusy(isBusy){
+  qs("#refreshMediaBtn").disabled = isBusy;
+  qs("#pickImageUploadBtn").disabled = isBusy;
+  qs("#pickGifUploadBtn").disabled = isBusy;
+}
+
+function updateMediaCounters(){
+  const images = Array.isArray(mediaLibrary.images) ? mediaLibrary.images.length : 0;
+  const gifs = Array.isArray(mediaLibrary.gifs) ? mediaLibrary.gifs.length : 0;
+  const totalBytes = mediaLibrary.images.concat(mediaLibrary.gifs).reduce((sum, entry) => {
+    const size = Number(entry && entry.size);
+    return sum + (Number.isFinite(size) && size > 0 ? size : 0);
+  }, 0);
+  qs("#imageAssetCount").textContent = String(images);
+  qs("#gifAssetCount").textContent = String(gifs);
+  qs("#mediaUsageSize").textContent = "已占用 " + formatBytes(totalBytes);
+}
+
+function updateMediaLibrarySwitch(){
+  const imageActive = activeMediaKind !== "gif";
+  const imageBtn = qs("#showImagesBtn");
+  const gifBtn = qs("#showGifsBtn");
+  imageBtn.classList.toggle("active", imageActive);
+  gifBtn.classList.toggle("active", !imageActive);
+  imageBtn.setAttribute("aria-selected", imageActive ? "true" : "false");
+  gifBtn.setAttribute("aria-selected", imageActive ? "false" : "true");
+  qs("#mediaLibraryKicker").textContent = imageActive ? "图片" : "动画";
+  qs("#mediaLibraryTitle").textContent = imageActive ? "静态图片" : "GIF 动画";
+}
+
+function setActiveMediaKind(kind){
+  activeMediaKind = kind === "gif" ? "gif" : "image";
+  updateMediaLibrarySwitch();
+  syncMediaGridVisibility();
+}
+
+function buildMediaEmptyState(title, note){
+  const empty = document.createElement("div");
+  empty.className = "empty media-empty";
+  empty.innerHTML = "<div><strong></strong><span></span></div>";
+  empty.querySelector("strong").textContent = title;
+  if(note){
+    empty.querySelector("span").textContent = note;
+  }else{
+    empty.querySelector("span").remove();
+  }
+  return empty;
+}
+
+function buildMediaCard(entry){
+  const card = document.createElement("article");
+  card.className = "media-card";
+
+  const preview = document.createElement("div");
+  preview.className = "media-preview";
+  const image = document.createElement("img");
+  image.loading = "lazy";
+  image.alt = entry && entry.name ? entry.name : mediaKindLabel(entry && entry.kind);
+  image.src = mediaPreviewUrl(entry && entry.path);
+  image.addEventListener("error", () => {
+    preview.innerHTML = "";
+    const fallback = document.createElement("span");
+    fallback.textContent = "当前无法预览";
+    preview.appendChild(fallback);
+  });
+  preview.appendChild(image);
+
+  const copy = document.createElement("div");
+  copy.className = "media-copy";
+
+  const title = document.createElement("h3");
+  title.textContent = entry && entry.name ? entry.name : "未命名资源";
+
+  const meta = document.createElement("div");
+  meta.className = "media-meta";
+
+  const kindPill = document.createElement("span");
+  kindPill.className = "pill";
+  kindPill.textContent = mediaKindLabel(entry && entry.kind);
+
+  const typePill = document.createElement("span");
+  typePill.className = "pill";
+  typePill.textContent = mediaTypeLabel(entry);
+
+  const size = document.createElement("span");
+  size.className = "media-size";
+  size.textContent = formatBytes(entry && entry.size);
+
+  meta.appendChild(kindPill);
+  meta.appendChild(typePill);
+  meta.appendChild(size);
+
+  const actions = document.createElement("div");
+  actions.className = "media-actions";
+
+  const openBtn = document.createElement("a");
+  openBtn.className = "btn ghost";
+  openBtn.href = mediaPreviewUrl(entry && entry.path);
+  openBtn.target = "_blank";
+  openBtn.rel = "noreferrer";
+  openBtn.textContent = "查看";
+
+  const removeBtn = document.createElement("button");
+  removeBtn.className = "btn danger";
+  removeBtn.type = "button";
+  removeBtn.textContent = "删除";
+  removeBtn.addEventListener("click", () => handleRemoveMedia(entry, removeBtn));
+
+  actions.appendChild(openBtn);
+  actions.appendChild(removeBtn);
+
+  copy.appendChild(title);
+  copy.appendChild(meta);
+  copy.appendChild(actions);
+
+  card.appendChild(preview);
+  card.appendChild(copy);
+  return card;
+}
+
+function renderMediaGrid(selector, entries, emptyTitle, emptyNote){
+  const wrap = qs(selector);
+  wrap.innerHTML = "";
+  if(!entries.length){
+    wrap.appendChild(buildMediaEmptyState(emptyTitle, emptyNote));
+    return;
+  }
+  entries.forEach((entry) => wrap.appendChild(buildMediaCard(entry)));
+}
+
+function renderActiveMediaLibrary(){
+  ["image", "gif"].forEach((kind) => {
+    renderMediaGrid(
+      mediaGridSelectorForKind(kind),
+      mediaEntriesForKind(kind),
+      kind === "gif" ? "还没有 GIF" : "还没有图片",
+      ""
+    );
+  });
+  syncMediaGridVisibility();
+}
+
+function renderMediaLibrary(){
+  updateMediaCounters();
+  updateMediaLibrarySwitch();
+  renderActiveMediaLibrary();
+}
+
+async function loadMediaLibrary(options){
+  const silent = !!(options && options.silent);
+  setMediaToolbarBusy(true);
+  setMediaStatus("正在同步资源。", false);
+  try{
+    const data = await loadMediaLibraryFromFs();
+    mediaLibrary = {
+      images: sortMediaEntries(data && data.images),
+      gifs: sortMediaEntries(data && data.gifs)
+    };
+    mediaRefreshToken = Date.now();
+    renderMediaLibrary();
+    const total = mediaLibrary.images.length + mediaLibrary.gifs.length;
+    setMediaStatus(total ? ("已同步 " + total + " 项。") : "暂无资源。", false);
+    return data;
+  }catch(err){
+    if(!silent){
+      showToast(err.message || String(err), true);
+    }
+    setMediaStatus(err.message || String(err), true);
+    return null;
+  }finally{
+    setMediaToolbarBusy(false);
+  }
+}
+
+async function listFsMediaDir(path, kind){
+  const data = await api("/api/system/fs/list?path=" + encodeURIComponent(path));
+  return (Array.isArray(data && data.entries) ? data.entries : [])
+    .filter((entry) => entry && !entry.is_dir)
+    .map((entry) => Object.assign({}, entry, { kind }));
+}
+
+async function loadMediaLibraryFromFs(){
+  const images = await listFsMediaDir("/sd/images", "image");
+  const gifs = await listFsMediaDir("/sd/gifs", "gif");
+  return { ok: true, images, gifs };
+}
+
+async function removeFsMediaFile(path){
+  return api("/api/system/fs/remove?path=" + encodeURIComponent(String(path || "")), { method: "DELETE" });
+}
+
+function validateMediaFile(kind, file){
+  const name = String(file && file.name || "");
+  const lower = name.toLowerCase();
+  if(!name){
+    throw new Error("文件名无效");
+  }
+  if(file.size > MAX_MEDIA_UPLOAD_BYTES){
+    throw new Error(name + " 超过 64 MB 上传限制");
+  }
+  if(kind === "gif"){
+    if(!/\.gif$/i.test(lower)){
+      throw new Error(name + " 不是 GIF 文件");
+    }
+    return;
+  }
+  if(/\.gif$/i.test(lower)){
+    throw new Error(name + " 请上传到 GIF 分组");
+  }
+  if(!/\.(png|jpg|jpeg|bmp|webp|svg)$/i.test(lower)){
+    throw new Error(name + " 格式不受支持");
+  }
+}
+
+async function handleMediaUpload(kind, fileList){
+  const files = Array.from(fileList || []);
+  if(!files.length){
+    return;
+  }
+  setMediaToolbarBusy(true);
+  let success = 0;
+  let lastError = "";
+  try{
+    for(const file of files){
+      try{
+        validateMediaFile(kind, file);
+        let uploadFile = file;
+        let prepared = { changed: false };
+        if(kind !== "gif"){
+          setMediaStatus("正在适配 " + file.name + "。", false);
+          prepared = await prepareImageFileForUpload(file);
+          uploadFile = prepared.file;
+        }
+        const sizeText = prepared.changed && prepared.width && prepared.height
+          ? (" " + prepared.width + "×" + prepared.height)
+          : "";
+        setMediaStatus("正在上传 " + uploadFile.name + sizeText + "。", false);
+        await uploadMediaFile(kind, uploadFile);
+        success += 1;
+      }catch(err){
+        lastError = err.message || String(err);
+        setMediaStatus(lastError, true);
+      }
+    }
+    await loadMediaLibrary({ silent: true });
+    if(success){
+      showToast("已上传 " + success + " 个文件", false);
+    }
+    if(success && lastError){
+      setMediaStatus("部分上传成功：" + lastError, true);
+      showToast(lastError, true);
+    }
+    if(!success && lastError){
+      showToast(lastError, true);
+    }
+    if(success && !lastError){
+      setMediaStatus("上传完成。", false);
+    }
+  }finally{
+    setMediaToolbarBusy(false);
+  }
+}
+
+async function handleRemoveMedia(entry, button){
+  if(!entry || !entry.path){
+    return;
+  }
+  if(!window.confirm("确认删除 “" + (entry.name || "该资源") + "” 吗？")){
+    return;
+  }
+  const prevText = button.textContent;
+  button.disabled = true;
+  button.textContent = "删除中...";
+  try{
+    setMediaStatus("正在删除。", false);
+    await removeFsMediaFile(entry.path);
+    await loadMediaLibrary({ silent: true });
+    showToast("已删除 " + (entry.name || "资源"), false);
+    setMediaStatus("已删除。", false);
+  }catch(err){
+    setMediaStatus(err.message || String(err), true);
+    showToast(err.message || String(err), true);
+  }finally{
+    button.disabled = false;
+    button.textContent = prevText;
+  }
+}
+
+function openImageManageView(){
+  setView("images");
+  loadMediaLibrary({ silent: false });
+}
+
+function openAppManageView(filter){
+  setView("appmanage");
+  if(filter){
+    const tab = qs('#appManageView .store-tab[data-filter="' + String(filter) + '"]');
+    if(tab){
+      tab.click();
+    }
+  }
+  if(typeof refreshAppStoreCatalog === "function"){
+    refreshAppStoreCatalog(false);
+  }
+}
+
+function returnToStartView(){
+  setView("start");
+}
+
+function appInstallJobsFromState(data){
+  const install = data && data.app_install;
+  if(!install){
+    return [];
+  }
+  if(Array.isArray(install.jobs)){
+    return install.jobs.filter(Boolean);
+  }
+  return Number(install.seq || 0) > 0 ? [install] : [];
+}
+
+function initAppManageView(){
+  const root = qs("#appManageView");
+  if(!root){
+    return;
+  }
+
+  const tabs = Array.from(root.querySelectorAll(".store-tab"));
+  const grid = root.querySelector("#storeAppGrid");
+  const count = root.querySelector("#storeAppCount");
+  const emptyState = root.querySelector("#storeEmptyState");
+  const serverInput = root.querySelector("#storeServerUrl");
+  const refreshBtn = root.querySelector("#refreshStoreBtn");
+  const updateBtn = root.querySelector("#updateStoreBtn");
+  const statusText = root.querySelector("#storeStatusText");
+  const serverHost = root.querySelector("#storeServerHost");
+  const detailModal = root.querySelector("#storeDetailModal");
+  const detailTitle = root.querySelector("#storeDetailTitle");
+  const detailSubtitle = root.querySelector("#storeDetailSubtitle");
+  const detailFrame = root.querySelector("#storeDetailFrame");
+  const detailLoading = root.querySelector("#storeDetailLoading");
+  const detailError = root.querySelector("#storeDetailError");
+  const detailErrorText = root.querySelector("#storeDetailErrorText");
+  const detailCloseBtn = root.querySelector("#storeDetailCloseBtn");
+  const detailRetryBtn = root.querySelector("#storeDetailRetryBtn");
+  const detailOpenLink = root.querySelector("#storeDetailOpenLink");
+  const themeClasses = [
+    "store-theme-green",
+    "store-theme-blue",
+    "store-theme-orange",
+    "store-theme-slate",
+    "store-theme-violet",
+    "store-theme-rose",
+    "store-theme-gold",
+    "store-theme-mint"
+  ];
+  let detailPageUrl = "";
+  let detailPageTitle = "";
+  let detailLoadToken = 0;
+  let detailLoadTimer = 0;
+  let detailActiveTrigger = null;
+  let detailBodyOverflow = "";
+
+  function normalizeDescriptionFields(source){
+    const raw = source && typeof source === "object" ? source : {};
+    const direct = raw.description;
+    let zh = "";
+    let en = "";
+    if(direct && typeof direct === "object"){
+      zh = String(direct.zh || direct["zh-CN"] || direct.cn || direct.chinese || "").trim();
+      en = String(direct.en || direct["en-US"] || direct.english || "").trim();
+    }else{
+      zh = String(direct || "").trim();
+    }
+    zh = String(raw.description_zh || raw.description_cn || raw.desc_zh || raw.desc_cn || zh || "").trim();
+    en = String(raw.description_en || raw.desc_en || en || "").trim();
+    return {
+      zh,
+      en,
+      text: zh || en
+    };
+  }
+
+  function storeDescriptionText(item){
+    if(!item){
+      return "";
+    }
+    const desc = item.description_fields || normalizeDescriptionFields(item);
+    return desc.zh || desc.text || desc.en || "";
+  }
+
+  function appInfoPathForItem(item, fileName){
+    const id = String(item && item.id || "").trim();
+    if(!id || id.indexOf("/") >= 0 || id.indexOf("\\") >= 0 || id.indexOf("..") >= 0){
+      return "";
+    }
+    return "/sd/apps/" + id + "/" + fileName;
+  }
+
+  function parseAppInfoText(text){
+    const out = {};
+    String(text || "").split(/\r?\n/).forEach((line) => {
+      const trimmed = line.trim();
+      if(!trimmed || trimmed[0] === "#" || trimmed[0] === ";"){
+        return;
+      }
+      const index = trimmed.indexOf("=");
+      const colon = trimmed.indexOf(":");
+      const split = index >= 0 ? index : colon;
+      if(split <= 0){
+        return;
+      }
+      const key = trimmed.slice(0, split).trim().toLowerCase();
+      const value = trimmed.slice(split + 1).trim();
+      if(key){
+        out[key] = value;
+      }
+    });
+    return out;
+  }
+
+  function appInfoDescriptionFields(info){
+    return normalizeDescriptionFields({
+      description: info.description || info.desc || "",
+      description_zh: info.description_zh || info.description_cn || info.desc_zh || info.desc_cn || "",
+      description_en: info.description_en || info.desc_en || ""
+    });
+  }
+
+  function appInfoHtml(item, info){
+    const desc = appInfoDescriptionFields(info);
+    const rows = [
+      ["应用名称", info.name || item.name || item.id],
+      ["版本", info.version || item.version || ""],
+      ["类型", storeKindLabel(info.kind || item.kind)],
+      ["作者", info.author || ""],
+      ["应用 ID", item.id || ""]
+    ].filter((row) => row[1]);
+    const descriptionHtml = desc.zh || desc.en
+      ? '<section class="local-section">' +
+          (desc.zh ? '<p>' + escapeHtml(desc.zh) + '</p>' : '') +
+          (desc.en ? '<p lang="en">' + escapeHtml(desc.en) + '</p>' : '') +
+        '</section>'
+      : '<p class="muted">这个应用没有填写介绍。</p>';
+    return '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<style>body{margin:0;padding:24px;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#15211c;background:#fbfdfc}h1{margin:0 0 12px;font-size:28px;line-height:1.12}.muted{color:#68766e}.local-section{margin:16px 0 20px}.local-section p{margin:0 0 10px}.info-grid{display:grid;gap:10px;margin-top:18px}.info-row{display:grid;grid-template-columns:86px minmax(0,1fr);gap:10px;padding:10px 0;border-top:1px solid rgba(22,35,27,.1)}.info-row span{color:#68766e}.info-row strong{font-weight:650;word-break:break-word}</style>' +
+      '</head><body><h1>' + escapeHtml(info.name || item.name || item.id || "应用详情") + '</h1>' +
+      descriptionHtml +
+      '<div class="info-grid">' + rows.map((row) => '<div class="info-row"><span>' + escapeHtml(row[0]) + '</span><strong>' + escapeHtml(row[1]) + '</strong></div>').join("") + '</div>' +
+      '</body></html>';
+  }
+
+  function normalizeServerUrl(value){
+    return String(value || "").trim().replace(/\/+$/, "");
+  }
+
+  function currentInstalledMap(){
+    const map = new Map();
+    const installedApps = latestSystemState && Array.isArray(latestSystemState.installed_apps)
+      ? latestSystemState.installed_apps
+      : [];
+    const apps = installedApps.length
+      ? installedApps
+      : (latestSystemState && Array.isArray(latestSystemState.apps) ? latestSystemState.apps : []);
+    apps.forEach((item) => {
+      const id = String(item && item.id || "").trim();
+      if(id){
+        map.set(id, item);
+      }
+    });
+    return map;
+  }
+
+  function storeThemeClass(id){
+    const text = String(id || "");
+    if(!text){
+      return themeClasses[0];
+    }
+    let hash = 0;
+    for(let i = 0; i < text.length; i += 1){
+      hash = (hash * 33 + text.charCodeAt(i)) >>> 0;
+    }
+    return themeClasses[hash % themeClasses.length];
+  }
+
+  function normalizeStoreKind(value){
+    const text = String(value || "").trim().toLowerCase();
+    if(text === "service"){
+      return "service";
+    }
+    if(text === "launcher"){
+      return "launcher";
+    }
+    return "app";
+  }
+
+  function storeKindLabel(kind){
+    const normalized = normalizeStoreKind(kind);
+    if(normalized === "service"){
+      return "服务";
+    }
+    if(normalized === "launcher"){
+      return "启动器";
+    }
+    return "应用";
+  }
+
+  function setStoreStatus(text, isError){
+    if(statusText){
+      statusText.textContent = String(text || "");
+      statusText.style.color = isError ? "#b54747" : "";
+    }
+  }
+
+  function setStoreServerHost(server){
+    if(!serverHost){
+      return;
+    }
+    if(!server){
+      serverHost.textContent = "未配置";
+      return;
+    }
+    try{
+      serverHost.textContent = new URL(server).host || server;
+    }catch(err){
+      serverHost.textContent = server;
+    }
+  }
+
+  function setStoreBusy(isBusy){
+    if(refreshBtn){
+      refreshBtn.disabled = !!isBusy;
+      refreshBtn.textContent = isBusy ? "刷新中..." : "刷新目录";
+    }
+    if(updateBtn){
+      updateBtn.disabled = !!isBusy;
+    }
+    if(serverInput){
+      serverInput.disabled = !!isBusy;
+    }
+  }
+
+  function setActiveStoreFilter(filter){
+    storeCurrentFilter = filter || "all";
+    tabs.forEach((item) => {
+      const active = item.dataset.filter === storeCurrentFilter;
+      item.classList.toggle("active", active);
+      item.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+  }
+
+  function setStoreDetailLoading(isVisible){
+    if(detailLoading){
+      detailLoading.classList.toggle("is-hidden", !isVisible);
+    }
+  }
+
+  function setStoreDetailError(message){
+    if(detailLoadTimer){
+      window.clearTimeout(detailLoadTimer);
+      detailLoadTimer = 0;
+    }
+    if(detailErrorText){
+      detailErrorText.textContent = String(message || "请稍后重试，或检查介绍页地址是否可访问。");
+    }
+    if(detailError){
+      detailError.classList.remove("is-hidden");
+    }
+    setStoreDetailLoading(false);
+  }
+
+  function closeStoreDetailModal(){
+    if(!detailModal){
+      return;
+    }
+    detailLoadToken += 1;
+    if(detailLoadTimer){
+      window.clearTimeout(detailLoadTimer);
+      detailLoadTimer = 0;
+    }
+    detailModal.classList.add("is-hidden");
+    detailModal.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = detailBodyOverflow;
+    detailBodyOverflow = "";
+    detailPageUrl = "";
+    detailPageTitle = "";
+    if(detailFrame){
+      detailFrame.removeAttribute("src");
+      detailFrame.removeAttribute("srcdoc");
+    }
+    if(detailError){
+      detailError.classList.add("is-hidden");
+    }
+    setStoreDetailLoading(false);
+    if(detailActiveTrigger && typeof detailActiveTrigger.focus === "function"){
+      detailActiveTrigger.focus();
+    }
+    detailActiveTrigger = null;
+  }
+
+  function openStoreDetailModal(url, title, trigger){
+    const nextUrl = String(url || "").trim();
+    if(!nextUrl){
+      showToast("这个应用没有详情页地址", true);
+      return;
+    }
+    if(!detailModal || !detailFrame){
+      window.open(nextUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    detailLoadToken += 1;
+    const requestToken = detailLoadToken;
+    detailPageUrl = nextUrl;
+    detailPageTitle = String(title || "应用详情");
+    detailActiveTrigger = trigger || document.activeElement;
+    if(detailModal.classList.contains("is-hidden")){
+      detailBodyOverflow = document.body.style.overflow || "";
+    }
+    document.body.style.overflow = "hidden";
+    if(detailTitle){
+      detailTitle.textContent = detailPageTitle;
+    }
+    if(detailSubtitle){
+      detailSubtitle.textContent = "正在打开应用介绍。";
+    }
+    if(detailOpenLink){
+      detailOpenLink.href = detailPageUrl;
+      detailOpenLink.style.display = "";
+    }
+    if(detailError){
+      detailError.classList.add("is-hidden");
+    }
+    if(detailLoadTimer){
+      window.clearTimeout(detailLoadTimer);
+      detailLoadTimer = 0;
+    }
+    setStoreDetailLoading(true);
+    detailModal.classList.remove("is-hidden");
+    detailModal.setAttribute("aria-hidden", "false");
+    detailFrame.removeAttribute("srcdoc");
+    detailFrame.src = detailPageUrl;
+    detailLoadTimer = window.setTimeout(() => {
+      if(requestToken !== detailLoadToken || detailModal.classList.contains("is-hidden")){
+        return;
+      }
+      setStoreDetailError("介绍页加载超时，请检查网络连接或介绍页地址是否可访问。");
+    }, 10000);
+    if(detailCloseBtn){
+      window.setTimeout(() => detailCloseBtn.focus(), 0);
+    }
+  }
+
+  function openStoreDetailHtmlModal(html, title, subtitle, trigger){
+    const content = String(html || "").trim();
+    if(!content){
+      showToast("这个应用没有本地介绍", true);
+      return;
+    }
+    if(!detailModal || !detailFrame){
+      const blob = new Blob([content], { type: "text/html;charset=utf-8" });
+      window.open(URL.createObjectURL(blob), "_blank", "noopener,noreferrer");
+      return;
+    }
+    detailLoadToken += 1;
+    detailPageUrl = "";
+    detailPageTitle = String(title || "应用详情");
+    detailActiveTrigger = trigger || document.activeElement;
+    if(detailModal.classList.contains("is-hidden")){
+      detailBodyOverflow = document.body.style.overflow || "";
+    }
+    document.body.style.overflow = "hidden";
+    if(detailTitle){
+      detailTitle.textContent = detailPageTitle;
+    }
+    if(detailSubtitle){
+      detailSubtitle.textContent = String(subtitle || "本地应用介绍。");
+    }
+    if(detailOpenLink){
+      detailOpenLink.removeAttribute("href");
+      detailOpenLink.style.display = "none";
+    }
+    if(detailError){
+      detailError.classList.add("is-hidden");
+    }
+    if(detailLoadTimer){
+      window.clearTimeout(detailLoadTimer);
+      detailLoadTimer = 0;
+    }
+    setStoreDetailLoading(false);
+    detailModal.classList.remove("is-hidden");
+    detailModal.setAttribute("aria-hidden", "false");
+    detailFrame.removeAttribute("src");
+    detailFrame.srcdoc = content;
+    if(detailCloseBtn){
+      window.setTimeout(() => detailCloseBtn.focus(), 0);
+    }
+  }
+
+  async function openLocalStoreDetail(item, trigger){
+    const infoHtmlPath = appInfoPathForItem(item, "info.html");
+    const appInfoPath = appInfoPathForItem(item, "app.info");
+    if(!infoHtmlPath || !appInfoPath){
+      showToast("应用 ID 无效，无法读取本地介绍", true);
+      return;
+    }
+    const prevText = trigger ? trigger.textContent : "";
+    if(trigger){
+      trigger.disabled = true;
+      trigger.textContent = "读取中...";
+    }
+    try{
+      try{
+        const html = await readDevtoolsTextFile(infoHtmlPath, 524288);
+        openStoreDetailHtmlModal(html, item.name || item.id || "应用详情", "来自设备本地 info.html。", trigger);
+        return;
+      }catch(err){}
+      const text = await readDevtoolsTextFile(appInfoPath, 65536);
+      const info = parseAppInfoText(text);
+      openStoreDetailHtmlModal(appInfoHtml(item, info), info.name || item.name || item.id || "应用详情", "来自设备本地 app.info。", trigger);
+    }catch(err){
+      showToast("本地没有找到 info.html 或 app.info", true);
+    }finally{
+      if(trigger){
+        trigger.disabled = false;
+        trigger.textContent = prevText;
+      }
+    }
+  }
+
+  function storeSearchText(item){
+    return String((item && item.id) || "") + " " + String((item && item.name) || "");
+  }
+
+  function hasStoreKeyword(item, words){
+    const text = storeSearchText(item).toLowerCase();
+    return words.some((word) => text.indexOf(word) >= 0);
+  }
+
+  function normalizeStoreItem(raw, installedMap){
+    const id = String(raw && (raw.app_id || raw.id) || "").trim();
+    const installedInfo = installedMap.get(id) || null;
+    const descriptionFields = normalizeDescriptionFields(raw);
+    const kind = normalizeStoreKind(
+      (raw && (raw.kind || raw.app_kind || raw.type)) ||
+      (installedInfo && installedInfo.kind) ||
+      "app"
+    );
+    return {
+      id,
+      name: String(raw && raw.name || id || "未命名应用"),
+      description: descriptionFields.text,
+      description_fields: descriptionFields,
+      icon_url: String(raw && raw.icon_url || ""),
+      manifest_url: String(raw && raw.manifest_url || ""),
+      description_page_url: String(raw && raw.description_page_url || ""),
+      description_json_url: String(raw && raw.description_json_url || ""),
+      package_url: String(raw && raw.package_url || ""),
+      version: String(raw && (raw.version || raw.app_version) || ""),
+      channel: String(raw && raw.channel || DEFAULT_APP_STORE_CHANNEL),
+      kind,
+      installed: !!installedInfo,
+      installedInfo
+    };
+  }
+
+  function localOnlyStoreItems(installedMap, existingIds){
+    const items = [];
+    installedMap.forEach((info, id) => {
+      if(existingIds && existingIds.has(id)){
+        return;
+      }
+      const descriptionFields = normalizeDescriptionFields(info);
+      items.push({
+        id,
+        name: String(info && info.name || id || "未命名应用"),
+        description: descriptionFields.text || "设备已安装，本次目录未返回该应用。",
+        description_fields: descriptionFields,
+        icon_url: "",
+        manifest_url: "",
+        description_page_url: "",
+        description_json_url: "",
+        package_url: "",
+        version: String(info && (info.version || info.app_version) || ""),
+        channel: "local",
+        kind: normalizeStoreKind(info && info.kind),
+        installed: true,
+        installedInfo: info || null
+      });
+    });
+    return items;
+  }
+
+  function matchesStoreFilter(item, filter){
+    if(filter === "installed"){
+      return !!item.installed;
+    }
+    if(filter === "available"){
+      return !item.installed;
+    }
+    if(filter === "service"){
+      return normalizeStoreKind(item.kind) === "service";
+    }
+    if(filter === "launcher"){
+      return normalizeStoreKind(item.kind) === "launcher" || hasStoreKeyword(item, ["launcher", "启动器"]);
+    }
+    if(filter === "weather"){
+      return hasStoreKeyword(item, ["weather", "天气"]);
+    }
+    if(filter === "time"){
+      return hasStoreKeyword(item, ["time", "时间"]);
+    }
+    return true;
+  }
+
+  function infoLinkForStoreItem(item){
+    return item.description_page_url || "";
+  }
+
+  function canUseLocalStoreInfo(item){
+    return !!(item && item.installed && item.id);
+  }
+
+  function clampInstallPercent(value){
+    const number = Number(value);
+    if(!Number.isFinite(number)){
+      return 0;
+    }
+    return Math.max(0, Math.min(100, Math.round(number)));
+  }
+
+  function versionParts(value){
+    const text = String(value || "").trim();
+    if(!text){
+      return [];
+    }
+    return (text.match(/\d+/g) || []).map((part) => Number(part));
+  }
+
+  function hasPositiveVersion(value){
+    return versionParts(value).some((part) => Number.isFinite(part) && part > 0);
+  }
+
+  function compareVersions(left, right){
+    const a = versionParts(left);
+    const b = versionParts(right);
+    const count = Math.max(a.length, b.length);
+    for(let i = 0; i < count; i += 1){
+      const av = Number(a[i] || 0);
+      const bv = Number(b[i] || 0);
+      if(av !== bv){
+        return av > bv ? 1 : -1;
+      }
+    }
+    return 0;
+  }
+
+  function installedVersionForItem(item){
+    const info = item && item.installedInfo;
+    return String(info && (info.version || info.app_version) || "");
+  }
+
+  function canUpdateStoreItem(item){
+    if(!item || !item.installed || !item.manifest_url){
+      return false;
+    }
+    const remoteVersion = String(item.version || "");
+    const installedVersion = installedVersionForItem(item);
+    if(!hasPositiveVersion(remoteVersion) || !hasPositiveVersion(installedVersion)){
+      return false;
+    }
+    return compareVersions(remoteVersion, installedVersion) > 0;
+  }
+
+  function catalogItemById(appId){
+    return storeCatalog.find((item) => String(item && item.id || "") === String(appId || "")) || null;
+  }
+
+  function setStoreInstallButtonIdle(button){
+    if(!button){
+      return;
+    }
+    button.classList.add("store-btn-primary", "store-btn-install");
+    button.classList.remove("is-installing", "store-btn-soft");
+    button.disabled = false;
+    button.removeAttribute("aria-label");
+    button.textContent = "安装";
+  }
+
+  function setStoreUpdateButtonIdle(button){
+    if(!button){
+      return;
+    }
+    button.classList.add("store-btn-primary", "store-btn-install");
+    button.classList.remove("is-installing", "store-btn-soft", "store-btn-danger");
+    button.disabled = false;
+    button.removeAttribute("aria-label");
+    button.textContent = "更新";
+  }
+
+  function setStoreUpdateButtonUnavailable(button){
+    if(!button){
+      return;
+    }
+    button.classList.remove("store-btn-primary", "is-installing", "store-btn-danger");
+    button.classList.add("store-btn-soft", "store-btn-install");
+    button.disabled = true;
+    button.removeAttribute("aria-label");
+    button.textContent = "不可更新";
+  }
+
+  function setStoreInstallButtonProgress(button, percent, actionText){
+    if(!button){
+      return;
+    }
+    const value = clampInstallPercent(percent);
+    button.classList.add("store-btn-primary", "store-btn-install", "is-installing");
+    button.classList.remove("store-btn-soft", "store-btn-danger");
+    button.disabled = true;
+    button.setAttribute("aria-label", (actionText || "处理中") + " " + value + "%");
+    button.innerHTML = '<span class="store-install-meter" aria-hidden="true"><span class="store-install-fill"></span><span class="store-install-label"></span></span>';
+    const fill = button.querySelector(".store-install-fill");
+    if(fill){
+      fill.style.width = String(value) + "%";
+    }
+    const label = button.querySelector(".store-install-label");
+    if(label){
+      label.textContent = String(value) + "%";
+    }
+  }
+
+  function setStoreInstallButtonInstalled(button){
+    if(!button){
+      return;
+    }
+    button.classList.remove("store-btn-primary", "is-installing");
+    button.classList.add("store-btn-soft", "store-btn-install");
+    button.disabled = true;
+    button.removeAttribute("aria-label");
+    button.textContent = "已安装";
+  }
+
+  async function startStoreInstallJob(item, button, actionName){
+    let started = false;
+    appInstallLocalAppIds.add(item.id);
+    setStoreInstallButtonProgress(button, 0, actionName + "中");
+    updateStoreInstallButtons({ app_install: { max_parallel: 3, jobs: [{ seq: 1, phase: "manifest", app_id: item.id, percent: 0 }] } });
+    try{
+      await api("/api/system/apps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ manifest_url: item.manifest_url, app_id: item.id, name: item.name })
+      });
+      started = true;
+      appInstallStartedFromPage = true;
+      showToast("已开始" + actionName + " " + item.name, false);
+      window.setTimeout(() => loadState(true), 250);
+    }catch(err){
+      appInstallLocalAppIds.delete(item.id);
+      showToast(err.message || String(err), true);
+    }finally{
+      if(!started){
+        appInstallLocalAppIds.delete(item.id);
+        if(button && button.dataset.storeAction === "update"){
+          if(canUpdateStoreItem(item)){
+            setStoreUpdateButtonIdle(button);
+          }else{
+            setStoreUpdateButtonUnavailable(button);
+          }
+        }else{
+          setStoreInstallButtonIdle(button);
+        }
+        updateStoreInstallButtons(latestSystemState);
+      }
+    }
+  }
+
+  function updateStoreInstallButtons(data){
+    if(!grid){
+      return;
+    }
+    const state = data || latestSystemState;
+    const install = state && state.app_install;
+    const maxParallel = Math.max(1, Number(install && install.max_parallel || 3));
+    const activeByAppId = new Map();
+    const doneByAppId = new Set();
+    let activeCount = 0;
+
+    appInstallJobsFromState(state).forEach((job) => {
+      const seq = Number(job && job.seq || 0);
+      const phase = String(job && job.phase || "");
+      const appId = String(job && job.app_id || "").trim();
+      if(seq <= 0 || !appId){
+        return;
+      }
+      if(!isTerminalAppInstallPhase(phase) && phase !== "" && phase !== "idle"){
+        activeCount += 1;
+        activeByAppId.set(appId, {
+          percent: clampInstallPercent(job && job.percent)
+        });
+      }else if(phase === "done"){
+        doneByAppId.add(appId);
+      }
+    });
+
+    appInstallLocalAppIds.forEach((appId) => {
+      if(!activeByAppId.has(appId)){
+        activeByAppId.set(appId, { percent: 0 });
+        activeCount += 1;
+      }
+    });
+
+    const installedMap = currentInstalledMap();
+    Array.from(grid.querySelectorAll(".store-btn-install[data-app-id]")).forEach((button) => {
+      const appId = String(button.dataset.appId || "").trim();
+      const action = String(button.dataset.storeAction || "install");
+      const catalogItem = catalogItemById(appId);
+      const target = activeByAppId.get(appId);
+      if(target){
+        setStoreInstallButtonProgress(button, target.percent, action === "update" ? "更新中" : "安装中");
+        return;
+      }
+      if(doneByAppId.has(appId)){
+        setStoreInstallButtonInstalled(button);
+        return;
+      }
+      if(action === "update"){
+        if(catalogItem && canUpdateStoreItem(catalogItem)){
+          setStoreUpdateButtonIdle(button);
+          if(activeCount >= maxParallel){
+            button.disabled = true;
+          }
+        }else{
+          setStoreUpdateButtonUnavailable(button);
+        }
+        return;
+      }
+      if(installedMap.has(appId)){
+        setStoreInstallButtonInstalled(button);
+        return;
+      }
+      setStoreInstallButtonIdle(button);
+      if(activeCount >= maxParallel){
+        button.disabled = true;
+      }
+    });
+  }
+
+  function buildStoreCard(item, index){
+    const card = document.createElement("article");
+    card.className = "store-app-card";
+    card.dataset.appId = item.id;
+    card.dataset.installed = item.installed ? "true" : "false";
+    card.dataset.kind = normalizeStoreKind(item.kind);
+    card.style.animationDelay = String(index * 40) + "ms";
+
+    const head = document.createElement("div");
+    head.className = "store-app-head";
+
+    const icon = document.createElement("div");
+    icon.className = "store-app-icon " + storeThemeClass(item.id);
+    icon.setAttribute("aria-hidden", "true");
+    renderAppIcon(icon, item);
+
+    const summary = document.createElement("div");
+    summary.className = "store-app-summary";
+
+    const copy = document.createElement("div");
+    copy.className = "store-app-copy";
+    const title = document.createElement("h3");
+    title.textContent = item.name;
+    const desc = document.createElement("p");
+    desc.textContent = storeDescriptionText(item) || ("版本 " + (item.version || "--"));
+    copy.appendChild(title);
+    copy.appendChild(desc);
+
+    const meta = document.createElement("div");
+    meta.className = "store-app-meta";
+    const kindTag = document.createElement("span");
+    kindTag.className = "store-tag";
+    kindTag.textContent = storeKindLabel(item.kind);
+    meta.appendChild(kindTag);
+
+    const tag = document.createElement("span");
+    tag.className = "store-tag";
+    if(item.installed && item.installedInfo && item.installedInfo.source && item.installedInfo.source !== "sd"){
+      tag.textContent = "内置";
+    }else if(item.installed){
+      tag.textContent = "已安装";
+    }else{
+      tag.textContent = item.channel || "stable";
+    }
+    meta.appendChild(tag);
+
+    summary.appendChild(copy);
+    summary.appendChild(meta);
+    head.appendChild(icon);
+    head.appendChild(summary);
+
+    const actions = document.createElement("div");
+    actions.className = "store-app-actions";
+
+    const infoUrl = infoLinkForStoreItem(item);
+    if(infoUrl){
+      const detailBtn = document.createElement("button");
+      detailBtn.className = "store-btn store-btn-detail store-btn-compact";
+      detailBtn.type = "button";
+      detailBtn.textContent = "介绍";
+      detailBtn.addEventListener("click", () => {
+        openStoreDetailModal(infoUrl, item.name, detailBtn);
+      });
+      actions.appendChild(detailBtn);
+    }else if(canUseLocalStoreInfo(item)){
+      const detailBtn = document.createElement("button");
+      detailBtn.className = "store-btn store-btn-detail store-btn-compact";
+      detailBtn.type = "button";
+      detailBtn.textContent = "介绍";
+      detailBtn.addEventListener("click", () => {
+        openLocalStoreDetail(item, detailBtn);
+      });
+      actions.appendChild(detailBtn);
+    }
+
+    const removable = !!(item.installedInfo && item.installedInfo.source === "sd");
+    const installable = !item.installed && !!item.manifest_url;
+    if(item.installed){
+      if(canUpdateStoreItem(item)){
+        const updateBtn = document.createElement("button");
+        updateBtn.type = "button";
+        updateBtn.className = "store-btn store-btn-compact";
+        updateBtn.dataset.appId = item.id;
+        updateBtn.dataset.storeAction = "update";
+        setStoreUpdateButtonIdle(updateBtn);
+        updateBtn.addEventListener("click", () => {
+          startStoreInstallJob(item, updateBtn, "更新");
+        });
+        actions.appendChild(updateBtn);
+      }
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "store-btn store-btn-compact";
+      if(removable){
+        removeBtn.classList.add("store-btn-danger");
+        removeBtn.textContent = "卸载";
+        removeBtn.addEventListener("click", async () => {
+          const prevText = removeBtn.textContent;
+          removeBtn.disabled = true;
+          removeBtn.textContent = "卸载中...";
+          try{
+            await api("/api/system/apps?id=" + encodeURIComponent(item.id), { method: "DELETE" });
+            showToast("已卸载 " + item.name, false);
+            await loadState(true);
+            await refreshAppStoreCatalog(true);
+          }catch(err){
+            showToast(err.message || String(err), true);
+          }finally{
+            removeBtn.disabled = false;
+            removeBtn.textContent = prevText;
+          }
+        });
+        actions.appendChild(removeBtn);
+      }
+    }else{
+      if(installable){
+        const actionBtn = document.createElement("button");
+        actionBtn.type = "button";
+        actionBtn.className = "store-btn store-btn-compact";
+        actionBtn.dataset.appId = item.id;
+        actionBtn.dataset.storeAction = "install";
+        setStoreInstallButtonIdle(actionBtn);
+        actionBtn.addEventListener("click", () => {
+          startStoreInstallJob(item, actionBtn, "安装");
+        });
+        actions.appendChild(actionBtn);
+      }
+    }
+
+    card.appendChild(head);
+    card.appendChild(actions);
+    return card;
+  }
+
+  function renderStoreApps(){
+    const visibleItems = storeCatalog.filter((item) => matchesStoreFilter(item, storeCurrentFilter));
+    grid.innerHTML = "";
+    visibleItems.forEach((item, index) => {
+      grid.appendChild(buildStoreCard(item, index));
+    });
+    if(count){
+      count.textContent = String(visibleItems.length) + " 个项目";
+    }
+    if(emptyState){
+      emptyState.classList.toggle("is-hidden", visibleItems.length !== 0);
+    }
+    updateStoreInstallButtons(latestSystemState);
+  }
+
+  syncAppStoreInstallButtons = updateStoreInstallButtons;
+
+  tabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      setActiveStoreFilter(tab.dataset.filter);
+      renderStoreApps();
+    });
+  });
+
+  refreshAppStoreCatalog = async function(silent){
+    const server = normalizeServerUrl(serverInput && serverInput.value);
+    storageSet(STORAGE_KEYS.appStoreUrl, server);
+    setStoreServerHost(server);
+
+    if(!server){
+      if(!latestSystemState){
+        await loadState(true);
+      }
+      const installedMap = currentInstalledMap();
+      storeCatalog = localOnlyStoreItems(installedMap, new Set());
+      setStoreStatus("填写应用目录地址后点击“刷新目录”。", false);
+      renderStoreApps();
+      return null;
+    }
+
+    setStoreBusy(true);
+    setStoreStatus("正在刷新目录。", false);
+    try{
+      if(!latestSystemState){
+        await loadState(true);
+      }
+      const data = await api(
+        "/api/system/apps/catalog?server=" + encodeURIComponent(server) +
+        "&channel=" + encodeURIComponent(DEFAULT_APP_STORE_CHANNEL)
+      );
+      const installedMap = currentInstalledMap();
+      const items = Array.isArray(data && data.items) ? data.items : [];
+      const normalizedItems = items
+        .map((item) => normalizeStoreItem(item, installedMap))
+        .filter((item) => item.id);
+      const seenIds = new Set(normalizedItems.map((item) => item.id));
+      storeCatalog = normalizedItems
+        .concat(localOnlyStoreItems(installedMap, seenIds))
+        .sort((a, b) => {
+          if(a.installed !== b.installed){
+            return a.installed ? -1 : 1;
+          }
+          return a.name.localeCompare(b.name, "zh-Hans-CN", { numeric: true, sensitivity: "base" });
+        });
+      setStoreStatus(storeCatalog.length ? ("已刷新 " + storeCatalog.length + " 个项目。") : "目录中没有项目。", false);
+      renderStoreApps();
+      return data;
+    }catch(err){
+      const installedMap = currentInstalledMap();
+      storeCatalog = localOnlyStoreItems(installedMap, new Set());
+      renderStoreApps();
+      setStoreStatus(err.message || String(err), true);
+      if(!silent){
+        showToast(err.message || String(err), true);
+      }
+      return null;
+    }finally{
+      setStoreBusy(false);
+    }
+  };
+
+  if(serverInput){
+    serverInput.value = normalizeServerUrl(storageGet(STORAGE_KEYS.appStoreUrl, ""));
+    serverInput.addEventListener("keydown", (ev) => {
+      if(ev.key === "Enter"){
+        ev.preventDefault();
+        refreshAppStoreCatalog(false);
+      }
+    });
+    setStoreServerHost(serverInput.value);
+  }
+
+  if(refreshBtn){
+    refreshBtn.addEventListener("click", () => {
+      refreshAppStoreCatalog(false);
+    });
+  }
+
+  if(updateBtn){
+    updateBtn.addEventListener("click", async () => {
+      const prevText = updateBtn.textContent;
+      updateBtn.disabled = true;
+      updateBtn.textContent = "更新中...";
+      try{
+        await loadState(true);
+        await refreshAppStoreCatalog(false);
+        showToast("应用列表已更新", false);
+      }catch(err){
+        showToast(err.message || String(err), true);
+      }finally{
+        updateBtn.disabled = false;
+        updateBtn.textContent = prevText;
+      }
+    });
+  }
+
+  if(detailFrame){
+    detailFrame.addEventListener("load", () => {
+      if(detailLoadTimer){
+        window.clearTimeout(detailLoadTimer);
+        detailLoadTimer = 0;
+      }
+      setStoreDetailLoading(false);
+      if(detailError){
+        detailError.classList.add("is-hidden");
+      }
+    });
+    detailFrame.addEventListener("error", () => {
+      setStoreDetailError("介绍页加载失败，请检查介绍页地址是否可访问。");
+    });
+  }
+
+  if(detailModal){
+    detailModal.addEventListener("click", (ev) => {
+      const target = ev.target;
+      if(target && target.nodeType === 1 && target.getAttribute("data-close-store-detail") === "true"){
+        closeStoreDetailModal();
+      }
+    });
+  }
+
+  if(detailCloseBtn){
+    detailCloseBtn.addEventListener("click", closeStoreDetailModal);
+  }
+
+  if(detailRetryBtn){
+    detailRetryBtn.addEventListener("click", () => {
+      if(!detailPageUrl){
+        return;
+      }
+      openStoreDetailModal(detailPageUrl, detailPageTitle || "应用详情", detailActiveTrigger);
+    });
+  }
+
+  window.addEventListener("keydown", (ev) => {
+    if(ev.key === "Escape" && detailModal && !detailModal.classList.contains("is-hidden")){
+      ev.preventDefault();
+      closeStoreDetailModal();
+    }
+  });
+
+  setActiveStoreFilter("all");
+  renderStoreApps();
+}
+
+function appInitials(name){
+  const compact = String(name || "").trim();
+  if(!compact){
+    return "AP";
+  }
+  const parts = compact.split(/[\s_-]+/).filter(Boolean);
+  if(parts.length >= 2){
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return compact.slice(0, 2).toUpperCase();
+}
+
+function appIconApiPath(appId, ext){
+  const normalizedId = String(appId || "").trim();
+  const normalizedExt = String(ext || "").trim().toLowerCase();
+  if(!normalizedId || !normalizedExt){
+    return "";
+  }
+  return "/api/system/fs/file?path=" + encodeURIComponent("/sd/apps/" + normalizedId + "/main." + normalizedExt);
+}
+
+function makeAppIconCandidate(url, transparentBlack){
+  return {
+    url: String(url || "").trim(),
+    transparentBlack: !!transparentBlack
+  };
+}
+
+function appIconCandidates(app){
+  const iconUrl = app && typeof app.icon_url === "string" ? app.icon_url.trim() : "";
+  if(iconUrl){
+    return [makeAppIconCandidate(iconUrl, /\.bmp(?:$|[?#])/i.test(iconUrl))];
+  }
+  const icon = app && typeof app.icon === "string" ? app.icon.trim() : "";
+  if(icon && icon[0] === "/"){
+    return [makeAppIconCandidate(icon, /\.bmp(?:$|[?#])/i.test(icon))];
+  }
+  const appId = app && typeof app.id === "string" ? app.id.trim() : "";
+  if(!appId){
+    return [];
+  }
+  return [
+    makeAppIconCandidate(appIconApiPath(appId, "png"), false),
+    makeAppIconCandidate(appIconApiPath(appId, "bmp"), true)
+  ];
+}
+
+function renderAppIconFallback(host, app){
+  host.classList.remove("has-image");
+  host.innerHTML = "<span>" + appInitials(app && (app.name || app.id || "app")) + "</span>";
+}
+
+function loadImageElement(url){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("image load failed"));
+    img.src = url;
+  });
+}
+
+function bmpBlackTransparentUrl(url){
+  const cached = appBmpIconCache.get(url);
+  if(cached){
+    return cached;
+  }
+
+  const task = loadImageElement(url).then((img) => {
+    const width = img.naturalWidth || img.width || 0;
+    const height = img.naturalHeight || img.height || 0;
+    if(width <= 0 || height <= 0){
+      throw new Error("invalid bmp size");
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if(!ctx){
+      throw new Error("canvas unavailable");
+    }
+
+    ctx.drawImage(img, 0, 0, width, height);
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const pixels = imageData.data;
+    let changed = false;
+    for(let i = 0; i < pixels.length; i += 4){
+      if(pixels[i] === 0 && pixels[i + 1] === 0 && pixels[i + 2] === 0){
+        pixels[i + 3] = 0;
+        changed = true;
+      }
+    }
+    if(changed){
+      ctx.putImageData(imageData, 0, 0);
+    }
+    return canvas.toDataURL("image/png");
+  });
+
+  appBmpIconCache.set(url, task);
+  task.catch(() => {
+    if(appBmpIconCache.get(url) === task){
+      appBmpIconCache.delete(url);
+    }
+  });
+  return task;
+}
+
+function resolveAppIconSource(candidate){
+  if(!candidate || !candidate.url){
+    return Promise.reject(new Error("icon candidate missing"));
+  }
+  return candidate.transparentBlack ? bmpBlackTransparentUrl(candidate.url) : Promise.resolve(candidate.url);
+}
+
+function renderAppIcon(host, app){
+  host.classList.remove("has-image");
+  host.innerHTML = "";
+  const candidates = appIconCandidates(app).filter((item) => item && item.url);
+  if(!candidates.length){
+    renderAppIconFallback(host, app);
+    return;
+  }
+
+  const img = document.createElement("img");
+  img.alt = "";
+  const token = String(Date.now()) + Math.random().toString(16).slice(2);
+  host.dataset.iconToken = token;
+  host.appendChild(img);
+
+  let index = 0;
+  const tryNext = () => {
+    if(host.dataset.iconToken !== token){
+      return;
+    }
+    if(index >= candidates.length){
+      renderAppIconFallback(host, app);
+      return;
+    }
+
+    const candidate = candidates[index++];
+    resolveAppIconSource(candidate).then((src) => {
+      if(host.dataset.iconToken !== token){
+        return;
+      }
+      img.onerror = () => {
+        if(host.dataset.iconToken !== token){
+          return;
+        }
+        tryNext();
+      };
+      img.onload = () => {
+        if(host.dataset.iconToken !== token){
+          return;
+        }
+        host.classList.add("has-image");
+      };
+      img.src = src;
+    }).catch(() => {
+      if(host.dataset.iconToken !== token){
+        return;
+      }
+      tryNext();
+    });
+  };
+
+  tryNext();
+}
+
+function currentAppId(data){
+  return data && data.current_app && data.current_app.id ? data.current_app.id : "";
+}
+
+function currentAppWebUiRoute(data){
+  const routeBase = data && data.current_route_base ? data.current_route_base : "";
+  return data && data.current_webui && routeBase ? (routeBase + "/") : "";
+}
+
+async function launchApp(app, button){
+  const prevText = button.textContent;
+  button.disabled = true;
+  button.textContent = "打开中...";
+  try{
+    await api("/api/system/launch?id=" + encodeURIComponent(app.id || ""), { method: "POST" });
+    showToast("正在打开 " + (app.name || app.id || "应用"), false);
+    setTimeout(() => loadState(true), 350);
+  }catch(err){
+    showToast(err.message || String(err), true);
+  }finally{
+    button.disabled = false;
+    button.textContent = prevText;
+  }
+}
+
+async function exitCurrentApp(button, busyText){
+  const prevText = button.textContent;
+  button.disabled = true;
+  button.textContent = busyText || "退出中...";
+  try{
+    await api("/api/system/exit", { method: "POST" });
+    showToast("正在返回启动器", false);
+    setTimeout(() => loadState(true), 350);
+  }catch(err){
+    showToast(err.message || String(err), true);
+  }finally{
+    button.disabled = false;
+    button.textContent = prevText;
+  }
+}
+
+function renderAppCardActions(host, app, current, routeHref){
+  host.innerHTML = "";
+  if(current){
+    if(routeHref){
+      const enterLink = document.createElement("a");
+      enterLink.className = "btn secondary";
+      enterLink.href = routeHref;
+      enterLink.textContent = "进入 app 页面";
+      host.appendChild(enterLink);
+    }
+
+    const exitBtn = document.createElement("button");
+    exitBtn.className = "btn danger";
+    exitBtn.type = "button";
+    exitBtn.textContent = "退出";
+    exitBtn.addEventListener("click", () => {
+      exitCurrentApp(exitBtn, "退出中...");
+    });
+    host.appendChild(exitBtn);
+    return;
+  }
+
+  const openBtn = document.createElement("button");
+  openBtn.className = "btn primary";
+  openBtn.type = "button";
+  openBtn.textContent = "打开";
+  openBtn.addEventListener("click", () => {
+    launchApp(app, openBtn);
+  });
+  host.appendChild(openBtn);
+}
+
+function updateAppCard(card, app, data){
+  const current = currentAppId(data) === (app && app.id ? app.id : "");
+  const routeHref = current ? currentAppWebUiRoute(data) : "";
+  card.classList.toggle("current", current);
+  card.querySelector(".app-name").textContent = app.name || app.id || "应用";
+  card.querySelector(".app-id").textContent = "/" + (app.id || "");
+
+  const statusTag = card.querySelector(".app-status");
+  statusTag.classList.toggle("current", current);
+  statusTag.classList.toggle("hidden", !current);
+  statusTag.textContent = current ? "运行中" : "";
+
+  renderAppCardActions(card.querySelector(".app-actions"), app, current, routeHref);
+}
+
+function buildAppCard(app){
+  const card = document.createElement("article");
+  card.className = "app-card";
+  card.innerHTML =
+    '<div class="app-main">' +
+      '<div class="app-icon"></div>' +
+      '<div class="app-copy">' +
+        '<h3 class="app-name"></h3>' +
+        '<div class="app-id visually-hidden"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="app-meta">' +
+      '<span class="tag app-status hidden"></span>' +
+      '<div class="toolbar app-actions"></div>' +
+    '</div>';
+
+  renderAppIcon(card.querySelector(".app-icon"), app);
+  return card;
+}
+
+function serviceItemsFromState(data){
+  const installed = Array.isArray(data && data.installed_apps) ? data.installed_apps : [];
+  const apps = Array.isArray(data && data.apps) ? data.apps : [];
+  const seen = new Set();
+  return installed.concat(apps).filter((item) => {
+    const id = String(item && item.id || "");
+    if(!id || seen.has(id)){
+      return false;
+    }
+    seen.add(id);
+    return String(item && item.kind || "").toLowerCase() === "service";
+  });
+}
+
+function buildServiceCard(service){
+  const card = document.createElement("article");
+  card.className = "app-card";
+  card.dataset.serviceId = String(service && service.id || "");
+  card.innerHTML =
+    '<div class="app-main">' +
+      '<div class="app-icon"></div>' +
+      '<div class="app-copy">' +
+        '<h3 class="app-name"></h3>' +
+        '<div class="app-note"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="app-meta">' +
+      '<span class="tag">服务</span>' +
+      '<div class="toolbar service-actions"></div>' +
+    '</div>';
+  renderAppIcon(card.querySelector(".app-icon"), service);
+  updateServiceCard(card, service);
+  return card;
+}
+
+function serviceRouteHref(service){
+  const route = String(service && service.route_base || "").trim();
+  if(route){
+    return route.endsWith("/") ? route : (route + "/");
+  }
+  const id = String(service && service.id || "").trim();
+  return id ? ("/" + encodeURIComponent(id) + "/") : "";
+}
+
+function updateServiceCard(card, service){
+  card.querySelector(".app-name").textContent = service.name || service.id || "设备服务";
+  card.querySelector(".app-note").textContent = service.version ? ("版本 " + service.version) : "已添加到设备";
+  const actions = card.querySelector(".service-actions");
+  const href = serviceRouteHref(service);
+  if(!actions){
+    return;
+  }
+  const currentHref = actions.dataset.href || "";
+  if(currentHref === href && actions.children.length){
+    return;
+  }
+  actions.dataset.href = href;
+  actions.innerHTML = "";
+  if(href){
+    const link = document.createElement("a");
+    link.className = "btn secondary";
+    link.href = href;
+    link.textContent = "进入服务页面";
+    actions.appendChild(link);
+  }
+}
+
+function renderServices(data){
+  const wrap = qs("#services");
+  const services = serviceItemsFromState(data);
+  const nextSignature = services.map((service) => String(service && service.id || "")).join("\n");
+  qs("#serviceCount").textContent = String(services.length) + " 个";
+  if(!services.length){
+    if(!wrap.querySelector(".empty") || wrap.children.length !== 1){
+      wrap.innerHTML = '<div class="empty"><strong>暂无设备服务</strong></div>';
+    }
+    serviceCardsSignature = "";
+    return;
+  }
+
+  if(nextSignature !== serviceCardsSignature || wrap.children.length !== services.length){
+    wrap.innerHTML = "";
+    services.forEach((service) => {
+      wrap.appendChild(buildServiceCard(service));
+    });
+    serviceCardsSignature = nextSignature;
+    return;
+  }
+
+  Array.from(wrap.querySelectorAll(".app-card")).forEach((card, index) => {
+    const service = services[index];
+    if(service){
+      updateServiceCard(card, service);
+    }
+  });
+}
+
+function getWifiState(data){
+  return data && data.wifi && typeof data.wifi === "object" ? data.wifi : {};
+}
+
+function isWifiConnectedFromSystemData(data){
+  const wifi = getWifiState(data);
+  return typeof wifi.sta_connected === "boolean" ? wifi.sta_connected : null;
+}
+
+function wifiSuccessRedirectUrl(ip){
+  const protocol = window.location.protocol === "https:" ? "https:" : "http:";
+  const url = new URL("/main", protocol + "//" + ip);
+  return url.href;
+}
+
+function maybeHandleWifiSuccessRedirect(data){
+  const wifi = getWifiState(data);
+  const ip = normalizeWifiSsid(wifi.sta_ip);
+  if(!wifi.sta_connected || !looksLikeIp(ip)){
+    if(!wifi.sta_connected){
+      wifiSuccessNoticeKey = "";
+    }
+    return;
+  }
+
+  const ssid = normalizeWifiSsid(wifi.sta_ssid || wifi.saved_ssid);
+  const key = ssid + "|" + ip;
+  if(wifiSuccessNoticeKey === key){
+    return;
+  }
+  wifiSuccessNoticeKey = key;
+  if(wifiSuccessRedirectTimer){
+    window.clearTimeout(wifiSuccessRedirectTimer);
+    wifiSuccessRedirectTimer = 0;
+  }
+
+  const target = wifiSuccessRedirectUrl(ip);
+  if(String(window.location.hostname || "") === ip){
+    return;
+  }
+
+  const message = "连接成功，IP: " + ip;
+  setWifiFormStatus(message + "，3 秒后跳转。", false);
+  showToast(message + "，3 秒后跳转", false, WIFI_SUCCESS_REDIRECT_DELAY_MS);
+
+  wifiSuccessRedirectTimer = window.setTimeout(() => {
+    wifiSuccessRedirectTimer = 0;
+    window.location.assign(target);
+  }, WIFI_SUCCESS_REDIRECT_DELAY_MS);
+}
+
+function normalizeWifiSsid(value){
+  return String(value || "").trim();
+}
+
+function wifiScanList(data){
+  const wifi = getWifiState(data);
+  return Array.isArray(wifi.scans) ? wifi.scans : [];
+}
+
+function firstScannedSsid(wifi){
+  const scans = Array.isArray(wifi.scans) ? wifi.scans : [];
+  for(const item of scans){
+    const ssid = normalizeWifiSsid(item && item.ssid);
+    if(ssid){
+      return ssid;
+    }
+  }
+  return "";
+}
+
+function preferredWifiSsid(data){
+  const wifi = getWifiState(data);
+  return normalizeWifiSsid(wifi.saved_ssid) || normalizeWifiSsid(wifi.sta_ssid) || firstScannedSsid(wifi) || "";
+}
+
+function currentConnectedWifiSsid(data){
+  const wifi = getWifiState(data);
+  return normalizeWifiSsid(wifi.sta_ssid) || normalizeWifiSsid(wifi.saved_ssid);
+}
+
+function findWifiRecordBySsid(data, ssid){
+  const target = normalizeWifiSsid(ssid);
+  if(!target){
+    return null;
+  }
+  const scans = wifiScanList(data);
+  for(const item of scans){
+    if(normalizeWifiSsid(item && item.ssid) === target){
+      return item;
+    }
+  }
+
+  const wifi = getWifiState(data);
+  if(target === normalizeWifiSsid(wifi.sta_ssid) && wifi.sta_rssi != null){
+    return {
+      ssid: target,
+      rssi: wifi.sta_rssi,
+      auth: null,
+      channel: null,
+      bandwidth: ""
+    };
+  }
+  return null;
+}
+
+function buildWifiChoices(data){
+  const wifi = getWifiState(data);
+  const out = [];
+  const seen = new Set();
+
+  function pushChoice(ssid, source){
+    const value = normalizeWifiSsid(ssid);
+    if(!value || seen.has(value)){
+      return;
+    }
+    seen.add(value);
+    out.push({
+      ssid: value,
+      source: source,
+      record: findWifiRecordBySsid(data, value)
+    });
+  }
+
+  pushChoice(wifi.sta_ssid, "connected");
+  pushChoice(wifi.saved_ssid, "saved");
+  pushChoice(selectedWifiSsid, "selected");
+  wifiScanList(data).forEach((item) => pushChoice(item && item.ssid, "scan"));
+  return out;
+}
+
+function currentWifiChoice(data){
+  const choices = buildWifiChoices(data);
+  const preferred = normalizeWifiSsid(selectedWifiSsid) || preferredWifiSsid(data);
+  if(preferred){
+    const found = choices.find((choice) => choice.ssid === preferred);
+    if(found){
+      selectedWifiSsid = found.ssid;
+      return found;
+    }
+  }
+  if(choices.length){
+    selectedWifiSsid = choices[0].ssid;
+    return choices[0];
+  }
+  selectedWifiSsid = preferred;
+  return preferred ? { ssid: preferred, source: "selected", record: findWifiRecordBySsid(data, preferred) } : null;
+}
+
+function isOpenWifiRecord(record){
+  return !!record && Number(record.auth) === 0;
+}
+
+function wifiSignalLevelFromRssi(rssi){
+  const value = Number(rssi);
+  if(!Number.isFinite(value)){
+    return 0;
+  }
+  if(value >= -55){
+    return 4;
+  }
+  if(value >= -67){
+    return 3;
+  }
+  if(value >= -75){
+    return 2;
+  }
+  if(value >= -85){
+    return 1;
+  }
+  return 0;
+}
+
+function buildWifiChoiceLabel(choice){
+  return choice && choice.ssid ? choice.ssid : "";
+}
+
+function buildWifiChoiceMeta(choice){
+  if(!choice || !choice.ssid){
+    return "点击扫描获取附近 WiFi 列表";
+  }
+
+  const parts = [];
+  if(choice.source === "connected"){
+    parts.push("当前连接");
+  }else if(choice.source === "saved"){
+    parts.push("已保存热点");
+  }
+
+  if(choice.record){
+    const level = wifiSignalLevelFromRssi(choice.record.rssi);
+    if(level === 4){
+      parts.push("信号强");
+    }else if(level === 3){
+      parts.push("信号良好");
+    }else if(level === 2){
+      parts.push("信号一般");
+    }else if(level === 1){
+      parts.push("信号较弱");
+    }
+    if(choice.record.rssi != null){
+      parts.push("RSSI " + choice.record.rssi + " dBm");
+    }
+    if(choice.record.channel != null){
+      parts.push("CH " + choice.record.channel);
+    }
+    if(choice.record.bandwidth){
+      parts.push(choice.record.bandwidth);
+    }
+    if(choice.record.auth != null){
+      parts.push(isOpenWifiRecord(choice.record) ? "开放网络" : "需要密码");
+    }
+  }
+
+  if(!parts.length){
+    parts.push("已选热点");
+  }
+  return parts.join(" · ");
+}
+
+function updateWifiSignalIndicator(choice){
+  const wrap = qs("#wifiSignalWrap");
+  const select = qs("#wifiSelect");
+  const trigger = qs("#wifiChoiceTrigger");
+  const text = qs("#wifiChoiceText");
+  const title = buildWifiChoiceMeta(choice);
+  const level = choice && choice.record ? wifiSignalLevelFromRssi(choice.record.rssi) : 0;
+  wrap.classList.remove("signal-0", "signal-1", "signal-2", "signal-3", "signal-4");
+  wrap.classList.add("signal-" + String(level));
+  wrap.title = title;
+  select.title = title;
+  trigger.title = title;
+  text.textContent = choice && choice.ssid ? choice.ssid : "等待扫描附近热点";
+}
+
+function wifiSignalSvgMarkup(level, className){
+  const safeLevel = Math.max(0, Math.min(4, Number(level) || 0));
+  return '<svg class="' + className + ' signal-' + safeLevel + '" viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+    '<path class="wifi-signal-high" d="M3.5 9.7a13.6 13.6 0 0 1 17 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+    '<path class="wifi-signal-mid" d="M6.8 13.2a8.7 8.7 0 0 1 10.4 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+    '<path class="wifi-signal-low" d="M10.1 16.8a3.8 3.8 0 0 1 3.8 0" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+    '<circle class="wifi-signal-dot" cx="12" cy="19.5" r="1.35" fill="currentColor"/>' +
+    '</svg>';
+}
+
+function wifiLockSvgMarkup(){
+  return '<svg class="wifi-choice-lock" viewBox="0 0 24 24" fill="none" aria-label="需要密码">' +
+    '<rect x="5.5" y="10.2" width="13" height="10" rx="2.2" stroke="currentColor" stroke-width="1.8"/>' +
+    '<path d="M8.4 10.2V7.7a3.6 3.6 0 0 1 7.2 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>' +
+    '</svg>';
+}
+
+function closeWifiChoiceMenu(){
+  const wrap = qs("#wifiSignalWrap");
+  const menu = qs("#wifiChoiceMenu");
+  const trigger = qs("#wifiChoiceTrigger");
+  wrap.classList.remove("is-open");
+  menu.classList.add("hidden");
+  trigger.setAttribute("aria-expanded", "false");
+}
+
+function toggleWifiChoiceMenu(){
+  const wrap = qs("#wifiSignalWrap");
+  const menu = qs("#wifiChoiceMenu");
+  const trigger = qs("#wifiChoiceTrigger");
+  if(trigger.disabled){
+    return;
+  }
+  const open = menu.classList.contains("hidden");
+  wrap.classList.toggle("is-open", open);
+  menu.classList.toggle("hidden", !open);
+  trigger.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function selectWifiChoice(ssid){
+  const select = qs("#wifiSelect");
+  select.value = ssid;
+  selectedWifiSsid = normalizeWifiSsid(ssid);
+  closeWifiChoiceMenu();
+  updateWifiSetupView(latestSystemState);
+}
+
+function renderWifiChoiceMenu(choices, selectedChoice, locked, emptyText){
+  const trigger = qs("#wifiChoiceTrigger");
+  const menu = qs("#wifiChoiceMenu");
+  const selectedSsid = selectedChoice && selectedChoice.ssid ? selectedChoice.ssid : "";
+  trigger.disabled = locked || !choices.length;
+  menu.innerHTML = "";
+  if(!choices.length){
+    qs("#wifiChoiceText").textContent = emptyText || "暂无可用热点";
+    closeWifiChoiceMenu();
+    return;
+  }
+
+  choices.forEach((choice) => {
+    const level = choice && choice.record ? wifiSignalLevelFromRssi(choice.record.rssi) : 0;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "wifi-choice-option";
+    button.setAttribute("role", "option");
+    button.setAttribute("aria-selected", choice.ssid === selectedSsid ? "true" : "false");
+    button.dataset.ssid = choice.ssid;
+    button.innerHTML = wifiSignalSvgMarkup(level, "wifi-choice-signal");
+
+    const copy = document.createElement("span");
+    copy.className = "wifi-choice-option-copy";
+
+    const nameRow = document.createElement("span");
+    nameRow.className = "wifi-choice-name-row";
+    const name = document.createElement("span");
+    name.className = "wifi-choice-option-name";
+    name.textContent = choice.ssid;
+    nameRow.appendChild(name);
+    if(choice.record && choice.record.auth != null && !isOpenWifiRecord(choice.record)){
+      const lock = document.createElement("span");
+      lock.innerHTML = wifiLockSvgMarkup();
+      nameRow.appendChild(lock.firstElementChild);
+    }
+
+    copy.appendChild(nameRow);
+    button.appendChild(copy);
+    button.addEventListener("click", () => selectWifiChoice(choice.ssid));
+    menu.appendChild(button);
+  });
+}
+
+function renderWifiSelect(data, locked){
+  const wifi = getWifiState(data);
+  const select = qs("#wifiSelect");
+  const choices = buildWifiChoices(data);
+  const activeChoice = currentWifiChoice(data);
+
+  select.innerHTML = "";
+  if(!choices.length){
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = wifi.scan_running ? "正在扫描附近热点..." : "暂无可用热点";
+    select.appendChild(option);
+    select.disabled = true;
+    updateWifiSignalIndicator(null);
+    renderWifiChoiceMenu([], null, true, option.textContent);
+    return null;
+  }
+
+  choices.forEach((choice) => {
+    const option = document.createElement("option");
+    option.value = choice.ssid;
+    option.textContent = buildWifiChoiceLabel(choice);
+    select.appendChild(option);
+  });
+
+  if(activeChoice && activeChoice.ssid){
+    select.value = activeChoice.ssid;
+  }
+  if(!select.value && choices[0]){
+    select.value = choices[0].ssid;
+  }
+
+  selectedWifiSsid = normalizeWifiSsid(select.value);
+  const selectedChoice = choices.find((choice) => choice.ssid === selectedWifiSsid) || choices[0];
+  select.disabled = locked || !choices.length;
+  updateWifiSignalIndicator(selectedChoice);
+  renderWifiChoiceMenu(choices, selectedChoice, locked, "");
+  return selectedChoice;
+}
+
+function updateWifiPasswordField(choice, locked){
+  const input = qs("#wifiPassword");
+  const toggle = qs("#wifiPasswordToggle");
+  const hasSsid = !!(choice && choice.ssid);
+  const openNetwork = !!(choice && isOpenWifiRecord(choice.record));
+
+  input.disabled = locked || !hasSsid;
+  input.required = hasSsid && !openNetwork;
+  input.minLength = openNetwork ? 0 : 8;
+  input.placeholder = "输入密码";
+  toggle.disabled = locked || !hasSsid;
+  if(locked || !hasSsid){
+    setWifiPasswordVisibility(false);
+  }
+}
+
+function wifiPhase(data){
+  const wifi = getWifiState(data);
+  if(wifi.sta_connected){
+    return "connected";
+  }
+  if(wifi.sta_connecting){
+    return "connecting";
+  }
+  if(wifi.last_error){
+    return "error";
+  }
+  if(wifi.scan_running){
+    return "scanning";
+  }
+  if(wifi.ap_enabled){
+    return "portal";
+  }
+  return "idle";
+}
+
+function updateWifiSetupView(data){
+  const wifi = getWifiState(data);
+  const portalSsid = wifi.ap_ssid || "Cubic Guest WiFi";
+  const phase = wifiPhase(data);
+  const selectionLocked = phase === "connecting";
+  const activeChoice = renderWifiSelect(data, selectionLocked);
+  const activeSsid = activeChoice && activeChoice.ssid ? activeChoice.ssid : "";
+  const connectedSsid = currentConnectedWifiSsid(data);
+  const sameAsConnected = phase === "connected" && activeSsid && activeSsid === connectedSsid;
+  const passwordLocked = phase === "connecting" || sameAsConnected;
+  const displaySsid = activeSsid || "等待可用热点";
+  let hint = "请输入密码";
+  if(phase === "connecting"){
+    hint = "正在连接中";
+  }else if(phase === "connected"){
+    hint = sameAsConnected ? "当前热点已连接" : "已选择新热点，可点击连接";
+  }else if(phase === "error"){
+    hint = wifi.last_error || "连接失败，请重试";
+  }else if(phase === "scanning"){
+    hint = "正在扫描可用热点";
+  }else if(activeChoice && isOpenWifiRecord(activeChoice.record)){
+    hint = "开放网络可直接连接";
+  }else if(!activeSsid){
+    hint = "暂未发现可连接热点";
+  }
+
+  qs("#wifiPortalPill").textContent = portalSsid;
+  qs("#wifiSigninTitle").textContent = displaySsid;
+  qs("#wifiSigninHint").textContent = hint;
+  qs("#wifiNetworkName").textContent = displaySsid;
+
+  updateWifiPasswordField(activeChoice, passwordLocked);
+  qs("#wifiSubmit").disabled = passwordLocked || !activeSsid;
+  qs("#wifiSubmit").textContent = sameAsConnected ? "已连接" : (phase === "connecting" ? "连接中..." : "连接");
+  qs("#wifiScanBtn").disabled = selectionLocked || wifi.scan_running || wifiScanRequested;
+  qs("#wifiScanBtn").textContent = (wifi.scan_running || wifiScanRequested) ? "扫描中..." : "扫描";
+}
+
+function uniqueScannedSsidCount(data){
+  const seen = new Set();
+  wifiScanList(data).forEach((item) => {
+    const ssid = normalizeWifiSsid(item && item.ssid);
+    if(ssid){
+      seen.add(ssid);
+    }
+  });
+  return seen.size;
+}
+
+async function requestWifiScan(options){
+  const data = options && Object.prototype.hasOwnProperty.call(options, "data") ? options.data : latestSystemState;
+  const force = !!(options && options.force);
+  const wifi = getWifiState(data);
+  if(wifiScanRequested || wifi.scan_running){
+    return null;
+  }
+  if(!force && firstScannedSsid(wifi)){
+    return null;
+  }
+
+  wifiScanRequested = true;
+  updateWifiSetupView(latestSystemState || data);
+  setWifiFormStatus("正在扫描附近热点，请稍候。", false);
+  try{
+    const next = await api("/api/system/wifi/scan", { method: "POST" });
+    latestSystemState = next;
+    updateWifiSetupView(next);
+    const count = uniqueScannedSsidCount(next);
+    setWifiFormStatus(count > 0 ? ("已刷新 " + count + " 个热点，请选择 WiFi。") : "未发现可用热点，请稍后重试。", count === 0);
+    return next;
+  }catch(err){
+    setWifiFormStatus(err.message || String(err), true);
+    throw err;
+  }finally{
+    window.setTimeout(() => {
+      wifiScanRequested = false;
+      updateWifiSetupView(latestSystemState || data);
+    }, 1200);
+  }
+}
+
+async function maybeStartWifiScan(data){
+  try{
+    return await requestWifiScan({ data: data, force: false });
+  }catch(err){
+    return null;
+  }
+}
+
+async function applyWifiGate(systemData){
+  const forcedWifi = new URLSearchParams(window.location.search).get("view") === "wifi";
+  const connected = isWifiConnectedFromSystemData(systemData);
+  updateWifiSetupView(systemData);
+  if(forcedWifi){
+    setView("wifi");
+    if(systemData){
+      maybeStartWifiScan(systemData);
+    }
+    return false;
+  }
+  if(connected === true){
+    sessionRemove(WIFI_SKIP_KEY);
+    if(!isPinnedSubView()){
+      setView("start");
+    }
+    return true;
+  }
+  if(connected === false && sessionGet(WIFI_SKIP_KEY) !== "1"){
+    setView("wifi");
+    if(systemData){
+      maybeStartWifiScan(systemData);
+    }
+    return false;
+  }
+  if(!isPinnedSubView()){
+    setView("start");
+  }
+  return true;
+}
+
+function deriveNetworkInfo(data){
+  const host = window.location.hostname || "";
+  const wifi = getWifiState(data);
+  const routeBase = data && data.current_route_base ? data.current_route_base : "";
+  const ip = wifi.sta_ip || wifi.ap_ip || (looksLikeIp(host) ? host : "-");
+  const mdns = normalizeWifiSsid(wifi.mdns) || (String(host || "").toLowerCase().endsWith(".local") ? host : DEFAULT_MDNS);
+  const webui = !!(data && data.current_webui && routeBase);
+  const staSsid = normalizeWifiSsid(wifi.sta_ssid);
+  const savedSsid = normalizeWifiSsid(wifi.saved_ssid);
+  const apSsid = normalizeWifiSsid(wifi.ap_ssid);
+  if(data && data.__offline){
+    return {
+      tone: "offline",
+      badge: "离线",
+      connectionSummary: "读取失败",
+      wifiName: "-",
+      mdns,
+      webuiText: "主页面"
+    };
+  }
+  if(wifi.sta_connected){
+    return {
+      tone: "online",
+      badge: "已连接",
+      connectionSummary: "连接成功，IP: " + ip,
+      wifiName: staSsid || savedSsid || "-",
+      mdns,
+      webuiText: webui ? "独立页面" : "主页面"
+    };
+  }
+  if(wifi.sta_connecting){
+    return {
+      tone: "neutral",
+      badge: "连接中",
+      connectionSummary: "正在连接，IP: " + ip,
+      wifiName: staSsid || savedSsid || "正在连接",
+      mdns,
+      webuiText: webui ? "独立页面" : "主页面"
+    };
+  }
+  if(wifi.ap_enabled){
+    return {
+      tone: "neutral",
+      badge: "AP 已开",
+      connectionSummary: "等待配网，IP: " + ip,
+      wifiName: apSsid || "等待配网",
+      mdns,
+      webuiText: webui ? "独立页面" : "主页面"
+    };
+  }
+  return {
+    tone: "offline",
+    badge: "未连接",
+    connectionSummary: wifi.last_error || "未连接",
+    wifiName: savedSsid || "-",
+    mdns,
+    webuiText: webui ? "独立页面" : "主页面"
+  };
+}
+
+function renderApps(data){
+  const wrap = qs("#apps");
+  const apps = Array.isArray(data.apps) ? data.apps : [];
+  const nextSignature = apps.map((app) => String(app && app.id || "")).join("\n");
+  qs("#appCount").textContent = String(apps.length);
+  if(!apps.length){
+    if(!wrap.querySelector(".empty") || wrap.children.length !== 1){
+      wrap.innerHTML = '<div class="empty"><strong>暂无应用</strong></div>';
+    }
+    appCardsSignature = "";
+    return;
+  }
+
+  if(nextSignature !== appCardsSignature || wrap.children.length !== apps.length){
+    wrap.innerHTML = "";
+    apps.forEach((app) => {
+      wrap.appendChild(buildAppCard(app));
+    });
+    appCardsSignature = nextSignature;
+  }
+
+  Array.from(wrap.querySelectorAll(".app-card")).forEach((card, index) => {
+    const app = apps[index];
+    if(app){
+      updateAppCard(card, app, data);
+    }
+  });
+}
+
+function isTerminalAppInstallPhase(phase){
+  return phase === "done" || phase === "error";
+}
+
+function handleAppInstallState(data){
+  const jobs = appInstallJobsFromState(data);
+
+  if(!appInstallStatePrimed){
+    appInstallStatePrimed = true;
+    if(!appInstallStartedFromPage){
+      jobs.forEach((job) => {
+        const seq = Number(job && job.seq || 0);
+        const phase = String(job && job.phase || "");
+        if(seq > 0 && isTerminalAppInstallPhase(phase)){
+          handledAppInstallSeqs.add(seq);
+        }
+      });
+      return;
+    }
+  }
+
+  const terminalJobs = jobs.filter((job) => {
+    const seq = Number(job && job.seq || 0);
+    const phase = String(job && job.phase || "");
+    return seq > 0 && isTerminalAppInstallPhase(phase) && !handledAppInstallSeqs.has(seq);
+  });
+  if(!terminalJobs.length){
+    const hasActive = jobs.some((job) => {
+      const seq = Number(job && job.seq || 0);
+      const phase = String(job && job.phase || "");
+      return seq > 0 && !isTerminalAppInstallPhase(phase) && phase !== "" && phase !== "idle";
+    });
+    if(!hasActive){
+      appInstallStartedFromPage = false;
+    }
+    return;
+  }
+
+  terminalJobs.forEach((job) => {
+    const seq = Number(job && job.seq || 0);
+    const phase = String(job && job.phase || "");
+    const appId = String(job && job.app_id || "");
+    handledAppInstallSeqs.add(seq);
+    if(appId){
+      appInstallLocalAppIds.delete(appId);
+    }
+
+    const ok = phase === "done";
+    const name = String((job && (job.name || job.app_id)) || "应用");
+    if(ok){
+      showToast("已安装 " + name, false);
+    }else{
+      const errorText = String(job && job.error || "安装失败");
+      showToast("安装失败：" + errorText, true);
+    }
+  });
+
+  if(appInstallCatalogSyncPending){
+    return;
+  }
+  appInstallCatalogSyncPending = true;
+  Promise.resolve().then(async () => {
+    if(currentView === "appmanage" && typeof refreshAppStoreCatalog === "function"){
+      await refreshAppStoreCatalog(true);
+    }
+  }).catch((err) => {
+    showToast(err.message || String(err), true);
+  }).finally(() => {
+    appInstallCatalogSyncPending = false;
+  });
+}
+
+function firmwarePhaseText(phase, active, available){
+  const value = String(phase || "idle");
+  if(value === "check"){
+    return "检查中";
+  }
+  if(value === "download"){
+    return "下载中";
+  }
+  if(value === "install"){
+    return "安装中";
+  }
+  if(value === "rebooting"){
+    return "即将重启";
+  }
+  if(value === "error"){
+    return "更新失败";
+  }
+  if(active){
+    return "更新中";
+  }
+  return available ? "有新版本" : "已是最新";
+}
+
+function renderFirmwareUpdate(data){
+  const fw = data && data.firmware_update ? data.firmware_update : {};
+  const currentVersion = String(fw.current_version || "-");
+  const latestVersion = String(fw.latest_version || "-");
+  const phase = String(fw.phase || "idle");
+  const active = !!fw.active || firmwareCheckBusy || firmwareUpdateBusy;
+  const available = !!fw.update_available;
+  const percent = Math.max(0, Math.min(100, Number(fw.percent || 0)));
+  const badgeText = firmwarePhaseText(phase, active, available);
+  let badgeTone = "neutral";
+  if(phase === "error"){
+    badgeTone = "offline";
+  }else if(available || active){
+    badgeTone = "online";
+  }
+
+  qs("#firmwareCurrentVersion").textContent = currentVersion;
+  qs("#firmwareLatestVersion").textContent = latestVersion;
+  setBadgeState("#firmwareUpdateBadge", badgeTone, badgeText);
+
+  const note = qs("#firmwareUpdateNote");
+  if(phase === "error"){
+    note.textContent = "更新失败：" + String(fw.error || "请稍后重试");
+  }else if(phase === "rebooting"){
+    note.textContent = "固件已写入，设备正在重启。";
+  }else if(active && phase === "download"){
+    note.textContent = "正在下载 " + percent + "%";
+  }else if(active){
+    note.textContent = badgeText;
+  }else if(available){
+    note.textContent = String(fw.notes || "发现可安装的新固件。");
+  }else{
+    note.textContent = "当前固件无需更新。";
+  }
+
+  qs("#firmwareProgressFill").style.width = String(active || phase === "rebooting" ? percent : 0) + "%";
+
+  const checkBtn = qs("#checkFirmwareBtn");
+  const updateBtn = qs("#startFirmwareUpdateBtn");
+  checkBtn.disabled = !!active;
+  checkBtn.textContent = firmwareCheckBusy ? "检查中..." : "检查更新";
+  updateBtn.disabled = !!active || !available;
+  updateBtn.textContent = phase === "rebooting" ? "即将重启" : (firmwareUpdateBusy || active ? "安装中..." : "安装更新");
+}
+
+async function checkFirmwareUpdate(){
+  firmwareCheckBusy = true;
+  renderFirmwareUpdate(latestSystemState || {});
+  try{
+    const data = await api("/api/system/firmware/check");
+    latestSystemState = Object.assign({}, latestSystemState || {}, {
+      firmware_update: data.firmware_update || null
+    });
+    renderFirmwareUpdate(latestSystemState);
+    const manifest = data.manifest || {};
+    showToast(manifest.update_available ? "发现新固件" : "当前已是最新版本", false);
+    return data;
+  }finally{
+    firmwareCheckBusy = false;
+    renderFirmwareUpdate(latestSystemState || {});
+  }
+}
+
+async function startFirmwareUpdate(){
+  const fw = latestSystemState && latestSystemState.firmware_update ? latestSystemState.firmware_update : {};
+  if(!fw.update_available){
+    await checkFirmwareUpdate();
+    const next = latestSystemState && latestSystemState.firmware_update ? latestSystemState.firmware_update : {};
+    if(!next.update_available){
+      return;
+    }
+  }
+  if(!window.confirm("安装固件更新后设备会自动重启。继续安装？")){
+    return;
+  }
+
+  firmwareUpdateBusy = true;
+  renderFirmwareUpdate(latestSystemState || {});
+  try{
+    const data = await api("/api/system/firmware/update", { method: "POST" });
+    latestSystemState = Object.assign({}, latestSystemState || {}, {
+      firmware_update: data.firmware_update || null
+    });
+    renderFirmwareUpdate(latestSystemState);
+    showToast("已开始安装固件更新", false);
+  }finally{
+    firmwareUpdateBusy = false;
+    renderFirmwareUpdate(latestSystemState || {});
+  }
+}
+
+function renderState(data){
+  const current = data.current_app || null;
+  const routeBase = data.current_route_base || "";
+  const webui = !!data.current_webui;
+  const routeText = webui && routeBase ? (routeBase + "/") : "/main";
+  const currentName = current ? (current.name || current.id || "应用") : "启动器";
+  const status = current ? "运行中" : "";
+  const networkInfo = deriveNetworkInfo(data);
+  qs("#runningApp").textContent = currentName;
+  qs("#routeBase").textContent = routeText;
+  qs("#currentWebui").textContent = networkInfo.webuiText;
+  qs("#wifiIp").textContent = networkInfo.connectionSummary;
+  qs("#wifiMdns").textContent = networkInfo.mdns;
+  qs("#wifiStateText").textContent = networkInfo.wifiName;
+  qs("#settingsRoute").textContent = routeText;
+  setBadgeState("#wifiStateBadge", networkInfo.tone, networkInfo.badge);
+  setBadgeState("#appStateBadge", "neutral", status);
+  qs("#exitBtn").disabled = !current;
+  renderApps(data);
+  renderServices(data);
+  renderFirmwareUpdate(data);
+  if(typeof syncAppStoreInstallButtons === "function"){
+    syncAppStoreInstallButtons(data);
+  }
+  handleAppInstallState(data);
+}
+
+function renderOfflineState(message){
+  const networkInfo = deriveNetworkInfo({ __offline: message || "当前无法读取系统状态" });
+  qs("#wifiIp").textContent = networkInfo.connectionSummary;
+  qs("#wifiMdns").textContent = networkInfo.mdns;
+  qs("#wifiStateText").textContent = networkInfo.wifiName;
+  setBadgeState("#wifiStateBadge", networkInfo.tone, networkInfo.badge);
+}
+
+async function loadState(silent){
+  try{
+    const data = await api("/api/system/state");
+    latestSystemState = data;
+    maybeHandleWifiSuccessRedirect(data);
+    if(await applyWifiGate(data)){
+      renderState(data);
+    }
+    return data;
+  }catch(err){
+    if(await applyWifiGate(null)){
+      renderOfflineState(err.message || String(err));
+      if(!silent){
+        throw err;
+      }
+    }
+    return null;
+  }
+}
+
+async function exitToLauncher(){
+  await exitCurrentApp(qs("#exitBtn"), "切换中...");
+}
+
+function currentSettingsPayload(){
+  return {
+    timezone: qs("#timezoneSelect").value || DEFAULT_TIMEZONE,
+    weather_address: qs("#weatherAddress").value.trim(),
+    saved_at: new Date().toISOString()
+  };
+}
+
+async function saveSettings(ev){
+  ev.preventDefault();
+  const button = qs("#saveSettings");
+  const prevText = button.textContent;
+  const payload = currentSettingsPayload();
+  storageSet(STORAGE_KEYS.timezone, payload.timezone);
+  storageSet(STORAGE_KEYS.weatherAddress, payload.weather_address);
+  button.disabled = true;
+  button.textContent = "保存中...";
+  try{
+    await uploadJsonFile(SETTINGS_JSON_PATH, payload);
+    showToast("已保存到设备", false);
+  }catch(err){
+    showToast("页面已保存，写入设备失败：" + (err.message || String(err)), true);
+  }finally{
+    button.disabled = false;
+    button.textContent = prevText;
+  }
+}
+
+async function resetSettings(){
+  storageRemove(STORAGE_KEYS.timezone);
+  storageRemove(STORAGE_KEYS.weatherAddress);
+  loadStoredSettings();
+  const button = qs("#resetSettings");
+  const prevText = button.textContent;
+  button.disabled = true;
+  button.textContent = "恢复中...";
+  try{
+    await uploadJsonFile(SETTINGS_JSON_PATH, currentSettingsPayload());
+    showToast("已恢复默认", false);
+  }catch(err){
+    showToast("页面已恢复默认，写入设备失败：" + (err.message || String(err)), true);
+  }finally{
+    button.disabled = false;
+    button.textContent = prevText;
+  }
+}
+
+function setWifiFormStatus(text, isError){
+  const node = qs("#wifiFormStatus");
+  node.textContent = text;
+  node.style.color = isError ? "#b54747" : "var(--success)";
+  node.classList.add("show");
+}
+
+function passwordToggleSvg(visible){
+  if(visible){
+    return '' +
+      '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+        '<path d="M3 3l18 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>' +
+        '<path d="M10.6 10.8a2.2 2.2 0 0 0 2.6 2.6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '<path d="M6.1 6.2C4.3 7.4 3 9.1 2.6 12c0 0 3.4 5.6 9.4 5.6 1.8 0 3.3-.5 4.7-1.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '<path d="M14.8 6.7c4 1 6.6 5.3 6.6 5.3a14.7 14.7 0 0 1-3.3 3.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '</svg>';
+  }
+  return '' +
+    '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">' +
+      '<path d="M2.6 12s3.4-5.6 9.4-5.6 9.4 5.6 9.4 5.6-3.4 5.6-9.4 5.6S2.6 12 2.6 12Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.7"/>' +
+    '</svg>';
+}
+
+function setWifiPasswordVisibility(visible){
+  const input = qs("#wifiPassword");
+  const button = qs("#wifiPasswordToggle");
+  input.type = visible ? "text" : "password";
+  button.setAttribute("aria-pressed", visible ? "true" : "false");
+  button.setAttribute("aria-label", visible ? "隐藏密码" : "显示密码");
+  button.title = visible ? "隐藏密码" : "显示密码";
+  button.innerHTML = passwordToggleSvg(visible);
+}
+
+function toggleWifiPasswordVisibility(){
+  setWifiPasswordVisibility(qs("#wifiPassword").type === "password");
+}
+
+function handleWifiSelectionChange(){
+  selectedWifiSsid = normalizeWifiSsid(qs("#wifiSelect").value);
+  updateWifiSetupView(latestSystemState);
+}
+
+function handleOpenWifiSetup(){
+  sessionRemove(WIFI_SKIP_KEY);
+  forceWifiView();
+  updateWifiSetupView(latestSystemState);
+  setView("wifi");
+  maybeStartWifiScan(latestSystemState);
+}
+
+function handleWifiSkip(){
+  sessionSet(WIFI_SKIP_KEY, "1");
+  clearForcedWifiView();
+  setView("start");
+  loadState(true);
+}
+
+function handleWifiScanClick(){
+  requestWifiScan({ data: latestSystemState, force: true }).catch((err) => {
+    showToast(err.message || String(err), true);
+  });
+}
+
+function handleWifiSubmit(ev){
+  ev.preventDefault();
+  const submit = qs("#wifiSubmit");
+  const choice = currentWifiChoice(latestSystemState);
+  const ssid = choice && choice.ssid ? choice.ssid : normalizeWifiSsid(qs("#wifiSelect").value);
+  const openNetwork = !!(choice && isOpenWifiRecord(choice.record));
+  const password = openNetwork ? "" : qs("#wifiPassword").value.trim();
+  if(!ssid){
+    setWifiFormStatus("当前没有可连接的热点，正在尝试扫描。", true);
+    maybeStartWifiScan(latestSystemState);
+    return;
+  }
+  if(!openNetwork && password.length < 8){
+    setWifiFormStatus("密码至少需要 8 位，请重新输入。", true);
+    qs("#wifiPassword").focus();
+    return;
+  }
+
+  submit.disabled = true;
+  submit.textContent = "连接中...";
+  sessionRemove(WIFI_SKIP_KEY);
+  setWifiFormStatus("正在保存并连接 " + ssid + "。", false);
+  api("/api/system/wifi/connect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ssid: ssid, pwd: password })
+  }).then(async (data) => {
+    latestSystemState = data;
+    updateWifiSetupView(data);
+    if(await applyWifiGate(data)){
+      renderState(data);
+    }
+    setWifiFormStatus("已提交连接请求，正在等待设备联网。", false);
+    showToast("已开始连接 " + ssid, false);
+  }).catch((err) => {
+    setWifiFormStatus(err.message || String(err), true);
+    showToast(err.message || String(err), true);
+  }).finally(() => {
+    updateWifiSetupView(latestSystemState);
+  });
+}
+
+function handleMediaInputChange(kind, ev){
+  const input = ev.target;
+  handleMediaUpload(kind, input.files).finally(() => {
+    input.value = "";
+  });
+}
+
+qs("#exitBtn").addEventListener("click", exitToLauncher);
+qs("#settingsForm").addEventListener("submit", saveSettings);
+qs("#resetSettings").addEventListener("click", resetSettings);
+qs("#installAppBtn").addEventListener("click", openAppManageView);
+qs("#openServiceManageBtn").addEventListener("click", () => openAppManageView("service"));
+qs("#backFromAppManageBtn").addEventListener("click", returnToStartView);
+qs("#openImageManageBtn").addEventListener("click", openImageManageView);
+qs("#checkFirmwareBtn").addEventListener("click", () => checkFirmwareUpdate().catch((err) => showToast(err.message || String(err), true)));
+qs("#startFirmwareUpdateBtn").addEventListener("click", () => startFirmwareUpdate().catch((err) => showToast(err.message || String(err), true)));
+qs("#backToStartBtn").addEventListener("click", returnToStartView);
+qs("#refreshMediaBtn").addEventListener("click", () => loadMediaLibrary({ silent: false }));
+qs("#showImagesBtn").addEventListener("click", () => setActiveMediaKind("image"));
+qs("#showGifsBtn").addEventListener("click", () => setActiveMediaKind("gif"));
+qs("#pickImageUploadBtn").addEventListener("click", () => qs("#imageUploadInput").click());
+qs("#pickGifUploadBtn").addEventListener("click", () => qs("#gifUploadInput").click());
+qs("#imageUploadInput").addEventListener("change", (ev) => handleMediaInputChange("image", ev));
+qs("#gifUploadInput").addEventListener("change", (ev) => handleMediaInputChange("gif", ev));
+qs("#openWifiSetupBtn").addEventListener("click", handleOpenWifiSetup);
+qs("#skipWifiBtn").addEventListener("click", handleWifiSkip);
+qs("#wifiScanBtn").addEventListener("click", handleWifiScanClick);
+qs("#wifiSelect").addEventListener("change", handleWifiSelectionChange);
+qs("#wifiChoiceTrigger").addEventListener("click", toggleWifiChoiceMenu);
+document.addEventListener("click", (ev) => {
+  const wrap = qs("#wifiSignalWrap");
+  if(!wrap.contains(ev.target)){
+    closeWifiChoiceMenu();
+  }
+});
+window.addEventListener("keydown", (ev) => {
+  if(ev.key === "Escape"){
+    closeWifiChoiceMenu();
+  }
+});
+qs("#wifiPasswordToggle").addEventListener("click", toggleWifiPasswordVisibility);
+qs("#wifiForm").addEventListener("submit", handleWifiSubmit);
+
+initAppManageView();
+loadStoredSettings();
+renderMediaLibrary();
+setWifiPasswordVisibility(false);
+loadMediaLibrary({ silent: true });
+loadState(false).catch((err) => showToast(err.message || String(err), true));
+setInterval(() => { loadState(true); }, 2500);
+</script>
+</body>
+</html>

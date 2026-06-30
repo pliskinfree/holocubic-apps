@@ -1,0 +1,52 @@
+dependencies:
+  78/esp-opus:
+    component_hash: 8182b733f071d7bfe1e837f4c9f8649a63e4c937177f089e65772880c02f2e17
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.5
+  espressif/cmake_utilities:
+    component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.5.3
+  espressif/elf_loader:
+    component_hash: 010565784683f41ead362d90f97b32d1e46bf8c325d08664eb704109d612297f
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=4.4.3'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    targets:
+    - esp32
+    - esp32s2
+    - esp32s3
+    - esp32c6
+    - esp32c61
+    - esp32p4
+    version: 1.3.1
+  idf:
+    source:
+      type: idf
+    version: 5.5.2
+direct_dependencies:
+- 78/esp-opus
+- espressif/elf_loader
+manifest_hash: 5e96bd4e6cd920d63240147e3e2a4aefdfd997787778fdff5011699cea97081b
+target: esp32s3
+version: 2.0.0

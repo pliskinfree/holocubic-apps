@@ -1,0 +1,1394 @@
+local Backend = {}
+
+local JSON = rawget(_G, "sjson") or rawget(_G, "json")
+
+local DEFAULT_LIMIT = 64
+local MAIN_REFRESH_MS = 20000
+local ERROR_RETRY_MS = 6000
+local HTTP_TIMEOUT_MS = 12000
+local FX_REFRESH_MS = 30 * 60 * 1000
+local FX_FALLBACK_USD_CNY = 7.20
+local FX_URL = "https://open.er-api.com/v6/latest/USD"
+local TROY_OUNCE_GRAMS = 31.1034768
+local POUND_GRAMS = 453.59237
+
+local CURRENCIES = {
+  { value = "USD", text = "美金" },
+  { value = "CNY", text = "人民币" },
+}
+
+local INTERVALS = {
+  { label = "5m", api_binance = "5m", api_yahoo = "5m", range_yahoo = "5d", klt_em = "5", em_span = "month" },
+  { label = "1h", api_binance = "1h", api_yahoo = "60m", range_yahoo = "1mo", klt_em = "60", em_span = "year" },
+  { label = "1day", api_binance = "1d", api_yahoo = "1d", range_yahoo = "6mo", klt_em = "101", em_span = "prev_year" },
+  { label = "7day", api_binance = "1w", api_yahoo = "1wk", range_yahoo = "5y", klt_em = "102", em_span = "three_year" },
+}
+
+local PRESET_ASSETS = {
+  { id = "crypto:BTCUSDT", group = "crypto", source = "binance", symbol = "BTCUSDT", text = "BTC / USDT", quote = "USD" },
+  { id = "crypto:ETHUSDT", group = "crypto", source = "binance", symbol = "ETHUSDT", text = "ETH / USDT", quote = "USD" },
+  { id = "crypto:SOLUSDT", group = "crypto", source = "binance", symbol = "SOLUSDT", text = "SOL / USDT", quote = "USD" },
+  { id = "crypto:BNBUSDT", group = "crypto", source = "binance", symbol = "BNBUSDT", text = "BNB / USDT", quote = "USD" },
+  { id = "crypto:XRPUSDT", group = "crypto", source = "binance", symbol = "XRPUSDT", text = "XRP / USDT", quote = "USD" },
+  { id = "crypto:DOGEUSDT", group = "crypto", source = "binance", symbol = "DOGEUSDT", text = "DOGE / USDT", quote = "USD" },
+  { id = "crypto:ADAUSDT", group = "crypto", source = "binance", symbol = "ADAUSDT", text = "ADA / USDT", quote = "USD" },
+  { id = "crypto:AVAXUSDT", group = "crypto", source = "binance", symbol = "AVAXUSDT", text = "AVAX / USDT", quote = "USD" },
+  { id = "nasdaq:100.NDX", group = "nasdaq", source = "eastmoney", symbol = "NDX", secid = "100.NDX", text = "纳斯达克", quote = "USD" },
+  { id = "nasdaq:100.NDX100", group = "nasdaq", source = "eastmoney", symbol = "NDX100", secid = "100.NDX100", text = "纳斯达克100", quote = "USD" },
+  { id = "nasdaq:105.AAPL", group = "nasdaq", source = "eastmoney", symbol = "AAPL", secid = "105.AAPL", text = "Apple", quote = "USD" },
+  { id = "nasdaq:105.MSFT", group = "nasdaq", source = "eastmoney", symbol = "MSFT", secid = "105.MSFT", text = "Microsoft", quote = "USD" },
+  { id = "nasdaq:105.NVDA", group = "nasdaq", source = "eastmoney", symbol = "NVDA", secid = "105.NVDA", text = "NVIDIA", quote = "USD" },
+  { id = "metal:101.GC00Y", group = "metal", source = "eastmoney", symbol = "GC00Y", secid = "101.GC00Y", text = "COMEX黄金", quote = "USD", metal_unit = "oz" },
+  { id = "metal:101.SI00Y", group = "metal", source = "eastmoney", symbol = "SI00Y", secid = "101.SI00Y", text = "COMEX白银", quote = "USD", metal_unit = "oz" },
+  { id = "metal:101.HG00Y", group = "metal", source = "eastmoney", symbol = "HG00Y", secid = "101.HG00Y", text = "COMEX铜", quote = "USD", metal_unit = "lb" },
+  { id = "ashare:1.000001", group = "ashare", source = "eastmoney", symbol = "000001", secid = "1.000001", text = "上证指数", quote = "CNY" },
+  { id = "ashare:1.000300", group = "ashare", source = "eastmoney", symbol = "000300", secid = "1.000300", text = "沪深300", quote = "CNY" },
+  { id = "ashare:1.000905", group = "ashare", source = "eastmoney", symbol = "000905", secid = "1.000905", text = "中证500", quote = "CNY" },
+  { id = "ashare:1.000852", group = "ashare", source = "eastmoney", symbol = "000852", secid = "1.000852", text = "中证1000", quote = "CNY" },
+  { id = "ashare:0.399001", group = "ashare", source = "eastmoney", symbol = "399001", secid = "0.399001", text = "深证成指", quote = "CNY" },
+  { id = "ashare:0.399006", group = "ashare", source = "eastmoney", symbol = "399006", secid = "0.399006", text = "创业板指", quote = "CNY" },
+  { id = "ashare:1.600519", group = "ashare", source = "eastmoney", symbol = "600519", secid = "1.600519", text = "贵州茅台", quote = "CNY" },
+  { id = "ashare:0.000001", group = "ashare", source = "eastmoney", symbol = "000001", secid = "0.000001", text = "平安银行", quote = "CNY" },
+  { id = "ashare:0.300750", group = "ashare", source = "eastmoney", symbol = "300750", secid = "0.300750", text = "宁德时代", quote = "CNY" },
+}
+
+-- 返回单调毫秒时间，用于刷新队列和按键节流。
+local function now_ms()
+  if millis then
+    local ok, value = pcall(millis)
+    if ok and type(value) == "number" then
+      return value
+    end
+  end
+  if tmr and tmr.now then
+    local ok, value = pcall(function() return tmr.now() end)
+    if ok and type(value) == "number" then
+      return math.floor(value / 1000)
+    end
+  end
+  if tmr and tmr.time then
+    local ok, value = pcall(function() return tmr.time() end)
+    if ok and type(value) == "number" then
+      return value * 1000
+    end
+  end
+  return 0
+end
+
+-- 格式化当前时间，设备未同步时也能给出可读占位。
+local function clock_text()
+  if time and time.getlocal then
+    local ok, t = pcall(function() return time.getlocal() end)
+    if ok and type(t) == "table" and t.hour then
+      return string.format("%02d:%02d:%02d", t.hour or 0, t.min or 0, t.sec or 0)
+    end
+  end
+  if time and time.get and time.epoch2cal then
+    local ok, sec = pcall(function() return time.get() end)
+    if ok and type(sec) == "number" then
+      local ok_cal, t = pcall(function() return time.epoch2cal(sec) end)
+      if ok_cal and type(t) == "table" and t.hour then
+        return string.format("%02d:%02d:%02d", t.hour or 0, t.min or 0, t.sec or 0)
+      end
+    end
+  end
+  if os and os.date then
+    local ok, t = pcall(os.date, "*t")
+    if ok and type(t) == "table" and t.hour then
+      return string.format("%02d:%02d:%02d", t.hour or 0, t.min or 0, t.sec or 0)
+    end
+  end
+  local s = math.floor(now_ms() / 1000)
+  return string.format("%02d:%02d:%02d", math.floor((s / 3600) % 24), math.floor((s / 60) % 60), s % 60)
+end
+
+-- 返回本地日期，东方财富 beg 用它限制返回体大小，避免 JSON/字符串处理爆内存。
+local function local_date_parts()
+  local year = 2026
+  local month = 6
+  local day = 1
+  if time and time.getlocal then
+    local ok, t = pcall(function() return time.getlocal() end)
+    if ok and type(t) == "table" then
+      year = tonumber(t.year or t.y or t[1]) or year
+      month = tonumber(t.mon or t.month or t[2]) or month
+      day = tonumber(t.day or t.mday or t[3]) or day
+      if year < 100 then
+        year = year + 2000
+      end
+    end
+  end
+  if year < 2024 or year > 2100 then year = 2026 end
+  if month < 1 or month > 12 then month = 6 end
+  if day < 1 or day > 31 then day = 1 end
+  return year, month, day
+end
+
+-- 东方财富日线如果 beg=0 会返回几十万字节历史数据，设备 JSON 解码会 NoMemory。
+local function eastmoney_begin(interval)
+  local year, month = local_date_parts()
+  local span = interval and interval.em_span or "year"
+  if span == "month" then
+    return string.format("%04d%02d01", year, month)
+  elseif span == "prev_year" then
+    return string.format("%04d0101", year - 1)
+  elseif span == "three_year" then
+    return string.format("%04d0101", year - 3)
+  end
+  return string.format("%04d0101", year)
+end
+
+-- 去掉首尾空白，避免 Web 传入的自定义代码带空格。
+local function trim(text)
+  return tostring(text or ""):match("^%s*(.-)%s*$") or ""
+end
+
+-- 对 URL 路径/参数做最小编码，支持 Yahoo 的 ^IXIC、GC=F 等符号。
+local function url_encode(text)
+  text = tostring(text or "")
+  return text:gsub("([^%w%-%_%.%~])", function(ch)
+    return string.format("%%%02X", string.byte(ch))
+  end)
+end
+
+-- 安全截断文本，屏幕端和 Web 状态都复用。
+local function short_text(text, limit)
+  text = tostring(text or ""):gsub("[\r\n]+", " ")
+  limit = tonumber(limit) or 40
+  if #text <= limit then
+    return text
+  end
+  if limit <= 3 then
+    return text:sub(1, limit)
+  end
+  return text:sub(1, limit - 3) .. "..."
+end
+
+-- 价格数值统一保留 2 位小数。
+local function fmt_price(value)
+  value = tonumber(value)
+  if not value then
+    return "--"
+  end
+  return string.format("%.2f", value)
+end
+
+-- 带正负号的涨跌额格式化，统一保留 2 位小数。
+local function fmt_signed(value)
+  value = tonumber(value)
+  if not value then
+    return "--"
+  end
+  return string.format("%+.2f", value)
+end
+
+-- 百分比格式化。
+local function fmt_pct(value)
+  value = tonumber(value)
+  if not value then
+    return "--%"
+  end
+  return string.format("%+.2f%%", value)
+end
+
+-- 找到周期配置。
+local function find_interval(label)
+  for i = 1, #INTERVALS do
+    if INTERVALS[i].label == label then
+      return INTERVALS[i], i
+    end
+  end
+  return INTERVALS[1], 1
+end
+
+-- 归一化图表模式，兼容 Web/按键传入的简写。
+local function normalize_mode(mode)
+  mode = tostring(mode or "")
+  if mode == "candle" or mode == "kline" or mode == "k" then
+    return "candle"
+  elseif mode == "line" then
+    return "line"
+  end
+  return nil
+end
+
+-- 归一化均线周期，0 表示不显示，当前只开放 MA10/MA20。
+local function normalize_ma_period(value)
+  local text = tostring(value or ""):lower()
+  if text == "" or text == "0" or text == "off" or text == "none" then
+    return 0
+  end
+  local period = tonumber(text:match("ma(%d+)") or text)
+  if period == 10 or period == 20 then
+    return period
+  end
+  return nil
+end
+
+-- 屏幕和 Web 复用的短模式名。
+local function mode_text(mode)
+  if normalize_mode(mode) == "candle" then
+    return "K"
+  end
+  return "Line"
+end
+
+-- 归一化显示币种，Web 可以传 CNY/RMB/人民币。
+local function normalize_currency(value)
+  local text = tostring(value or ""):upper()
+  if text == "CNY" or text == "RMB" or tostring(value or "") == "人民币" then
+    return "CNY"
+  end
+  return "USD"
+end
+
+local function currency_text(value)
+  if normalize_currency(value) == "CNY" then
+    return "人民币"
+  end
+  return "美金"
+end
+
+-- 复制币种选项，避免 Web 快照污染常量表。
+local function public_currencies()
+  local out = {}
+  for i = 1, #CURRENCIES do
+    out[#out + 1] = {
+      value = CURRENCIES[i].value,
+      text = CURRENCIES[i].text,
+    }
+  end
+  return out
+end
+
+-- 金银默认是美元/金衡盎司，铜默认是美元/磅，显示时统一换成每克。
+local function infer_metal_unit(symbol)
+  local text = tostring(symbol or ""):upper()
+  if text:find("HG", 1, true) or text:find("CU", 1, true) then
+    return "lb"
+  end
+  return "oz"
+end
+
+local function metal_unit(asset)
+  if asset and asset.metal_unit then
+    return asset.metal_unit
+  end
+  return infer_metal_unit(asset and asset.symbol or "")
+end
+
+local function unit_text(asset)
+  if asset and asset.group == "metal" then
+    return "/g"
+  end
+  return ""
+end
+
+local function convert_currency(value, from_currency, to_currency, usd_cny)
+  value = tonumber(value)
+  if not value then
+    return nil
+  end
+  from_currency = normalize_currency(from_currency)
+  to_currency = normalize_currency(to_currency)
+  usd_cny = tonumber(usd_cny) or FX_FALLBACK_USD_CNY
+  if from_currency == to_currency then
+    return value
+  elseif from_currency == "USD" and to_currency == "CNY" then
+    return value * usd_cny
+  elseif from_currency == "CNY" and to_currency == "USD" and usd_cny ~= 0 then
+    return value / usd_cny
+  end
+  return value
+end
+
+-- 把源价格转换为屏幕/Web 当前显示价格。
+local function display_price(asset, value, target_currency, usd_cny)
+  local v = tonumber(value)
+  if not v then
+    return nil
+  end
+
+  local base_currency = asset and asset.quote or "USD"
+  if asset and asset.group == "metal" then
+    if metal_unit(asset) == "lb" then
+      v = v / POUND_GRAMS
+    else
+      v = v / TROY_OUNCE_GRAMS
+    end
+    base_currency = "USD"
+  end
+
+  return convert_currency(v, base_currency, target_currency, usd_cny)
+end
+
+-- 复制资产字段，避免 Web 修改快照时污染运行状态。
+local function public_asset(asset)
+  if not asset then
+    return nil
+  end
+  return {
+    id = asset.id,
+    group = asset.group,
+    source = asset.source,
+    symbol = asset.symbol,
+    secid = asset.secid,
+    text = asset.text,
+    quote = asset.quote,
+    metal_unit = asset.metal_unit,
+  }
+end
+
+-- 返回响应头字段，兼容大小写差异。
+local function header_value(headers, key)
+  if type(headers) ~= "table" then
+    return nil
+  end
+  return headers[key] or headers[key:lower()] or headers[key:upper()]
+end
+
+-- 必要时解 gzip，保持公开接口返回体解析稳定。
+local function maybe_decompress(body, headers)
+  if type(body) ~= "string" then
+    return body, nil
+  end
+  local enc = header_value(headers, "content-encoding")
+  if type(enc) ~= "string" or not enc:find("gzip", 1, true) then
+    return body, nil
+  end
+  if not zlib or not zlib.isgzip or not zlib.gunzip then
+    return nil, "gzip no zlib"
+  end
+  if not zlib.isgzip(body) then
+    return nil, "gzip bad body"
+  end
+  local plain, err = zlib.gunzip(body)
+  if not plain then
+    return nil, err or "gunzip failed"
+  end
+  return plain, nil
+end
+
+-- JSON 解码封装，统一错误文本。
+local function decode_json(raw)
+  if not JSON or not JSON.decode then
+    return nil, "json missing"
+  end
+  local ok, doc, err = pcall(function()
+    return JSON.decode(raw)
+  end)
+  if not ok then
+    return nil, tostring(doc)
+  end
+  if not doc then
+    return nil, tostring(err or "json decode failed")
+  end
+  return doc, nil
+end
+
+-- JSON 编码封装，保存设置失败时只记录错误，不影响行情刷新。
+local function encode_json(value)
+  if not JSON or not JSON.encode then
+    return nil, "json missing"
+  end
+  local ok, raw, err = pcall(function()
+    return JSON.encode(value)
+  end)
+  if not ok then
+    return nil, tostring(raw)
+  end
+  if type(raw) ~= "string" then
+    return nil, tostring(err or "json encode failed")
+  end
+  return raw, nil
+end
+
+-- 从配置文件恢复自定义资产，只接受 app 自己会生成的字段。
+local function restore_custom_asset(value)
+  if type(value) ~= "table" then
+    return nil
+  end
+  local id = tostring(value.id or "")
+  local source = tostring(value.source or "")
+  local symbol = tostring(value.symbol or "")
+  if id == "" or source == "" or symbol == "" then
+    return nil
+  end
+  if source ~= "binance" and source ~= "yahoo" and source ~= "eastmoney" then
+    return nil
+  end
+
+  local group = tostring(value.group or "")
+  if group ~= "crypto" and group ~= "nasdaq" and group ~= "metal" and group ~= "ashare" then
+    group = "crypto"
+  end
+
+  local asset = {
+    id = id,
+    group = group,
+    source = source,
+    symbol = symbol,
+    text = tostring(value.text or symbol),
+    quote = normalize_currency(value.quote or (group == "ashare" and "CNY" or "USD")),
+  }
+  if value.secid then
+    asset.secid = tostring(value.secid)
+  end
+  local unit = tostring(value.metal_unit or "")
+  if unit == "oz" or unit == "lb" then
+    asset.metal_unit = unit
+  end
+  return asset
+end
+
+-- 解析 open.er-api.com 的 USD -> CNY 汇率。
+local function parse_usd_cny(doc)
+  local rates = type(doc) == "table" and doc.rates
+  local rate = rates and tonumber(rates.CNY)
+  if rate and rate > 0 and rate < 20 then
+    return rate, nil
+  end
+  return nil, "fx CNY missing"
+end
+
+-- 简单 CSV 行拆分，东方财富 K 线字段不含引号。
+local function split_csv(line)
+  local out = {}
+  for item in tostring(line or ""):gmatch("([^,]+)") do
+    out[#out + 1] = item
+  end
+  return out
+end
+
+-- 统计 K 线范围和收盘序列。
+local function summarize(candles, parsed)
+  if #candles < 1 then
+    return nil, "points<1"
+  end
+
+  local closes = {}
+  local minp = nil
+  local maxp = nil
+  for i = 1, #candles do
+    local c = candles[i]
+    closes[#closes + 1] = c.close
+    local lo = tonumber(c.low) or tonumber(c.close)
+    local hi = tonumber(c.high) or tonumber(c.close)
+    if lo and (not minp or lo < minp) then
+      minp = lo
+    end
+    if hi and (not maxp or hi > maxp) then
+      maxp = hi
+    end
+  end
+
+  parsed.candles = candles
+  parsed.closes = closes
+  parsed.min_price = minp
+  parsed.max_price = maxp
+  parsed.first_price = closes[1]
+  parsed.current_price = parsed.current_price or closes[#closes]
+  return parsed, nil
+end
+
+-- 解析 Binance kline 数组。
+local function parse_binance(doc, asset)
+  if type(doc) ~= "table" then
+    return nil, "json type"
+  end
+  local candles = {}
+  for _, row in ipairs(doc) do
+    if type(row) == "table" then
+      local open_p = tonumber(row[2])
+      local high_p = tonumber(row[3])
+      local low_p = tonumber(row[4])
+      local close_p = tonumber(row[5])
+      if open_p and high_p and low_p and close_p then
+        candles[#candles + 1] = {
+          time = tonumber(row[1]) or 0,
+          open = open_p,
+          high = high_p,
+          low = low_p,
+          close = close_p,
+        }
+      end
+    end
+  end
+  return summarize(candles, { currency = asset.quote or "USD" })
+end
+
+-- 解析 Yahoo chart 结构，覆盖纳指、美股和金银铜。
+local function parse_yahoo(doc, asset)
+  local chart = type(doc) == "table" and doc.chart
+  local result = chart and chart.result and chart.result[1]
+  if type(result) ~= "table" then
+    return nil, "chart empty"
+  end
+
+  local meta = result.meta or {}
+  local quote = result.indicators and result.indicators.quote and result.indicators.quote[1]
+  local ts = result.timestamp
+  if type(quote) ~= "table" or type(ts) ~= "table" then
+    return nil, "quote empty"
+  end
+
+  local opens = quote.open or {}
+  local highs = quote.high or {}
+  local lows = quote.low or {}
+  local closes = quote.close or {}
+  local candles = {}
+  for i = 1, #ts do
+    local close_p = tonumber(closes[i])
+    if close_p then
+      local open_p = tonumber(opens[i]) or close_p
+      local high_p = tonumber(highs[i]) or math.max(open_p, close_p)
+      local low_p = tonumber(lows[i]) or math.min(open_p, close_p)
+      candles[#candles + 1] = {
+        time = (tonumber(ts[i]) or 0) * 1000,
+        open = open_p,
+        high = high_p,
+        low = low_p,
+        close = close_p,
+      }
+    end
+  end
+
+  return summarize(candles, {
+    currency = meta.currency or asset.quote or "",
+    prev_close = tonumber(meta.chartPreviousClose) or tonumber(meta.previousClose),
+    current_price = tonumber(meta.regularMarketPrice),
+  })
+end
+
+-- 解析东方财富 K 线，覆盖 A 股个股和指数。
+local function parse_eastmoney(doc, asset)
+  if type(doc) == "string" then
+    local block = doc:match('"klines"%s*:%s*%[(.-)%]')
+    if not block then
+      return nil, "kline empty"
+    end
+
+    local lines = {}
+    for line in block:gmatch('"([^"]+)"') do
+      lines[#lines + 1] = line
+      if #lines > DEFAULT_LIMIT then
+        table.remove(lines, 1)
+      end
+    end
+
+    local candles = {}
+    for _, line in ipairs(lines) do
+      local fields = split_csv(line)
+      local open_p = tonumber(fields[2])
+      local close_p = tonumber(fields[3])
+      local high_p = tonumber(fields[4])
+      local low_p = tonumber(fields[5])
+      if open_p and close_p and high_p and low_p then
+        candles[#candles + 1] = {
+          time = fields[1] or "",
+          open = open_p,
+          high = high_p,
+          low = low_p,
+          close = close_p,
+        }
+      end
+    end
+
+    return summarize(candles, {
+      currency = asset.quote or "CNY",
+      prev_close = tonumber(doc:match('"preKPrice"%s*:%s*"?([%-%d%.]+)"?')),
+      name = doc:match('"name"%s*:%s*"([^"]*)"'),
+    })
+  end
+
+  local data = type(doc) == "table" and doc.data
+  if type(data) ~= "table" or type(data.klines) ~= "table" then
+    return nil, "kline empty"
+  end
+
+  local candles = {}
+  for _, line in ipairs(data.klines) do
+    local fields = split_csv(line)
+    local open_p = tonumber(fields[2])
+    local close_p = tonumber(fields[3])
+    local high_p = tonumber(fields[4])
+    local low_p = tonumber(fields[5])
+    if open_p and close_p and high_p and low_p then
+      candles[#candles + 1] = {
+        time = fields[1] or "",
+        open = open_p,
+        high = high_p,
+        low = low_p,
+        close = close_p,
+      }
+    end
+  end
+
+  return summarize(candles, {
+    currency = asset.quote or "CNY",
+    prev_close = tonumber(data.preKPrice),
+    name = data.name,
+  })
+end
+
+-- 按来源构建公开接口 URL。
+local function build_url(asset, interval)
+  if asset.source == "binance" then
+    return "https://data-api.binance.vision/api/v3/klines?symbol="
+      .. url_encode(asset.symbol)
+      .. "&interval=" .. interval.api_binance
+      .. "&limit=" .. tostring(DEFAULT_LIMIT)
+  elseif asset.source == "yahoo" then
+    return "https://query1.finance.yahoo.com/v8/finance/chart/"
+      .. url_encode(asset.symbol)
+      .. "?range=" .. interval.range_yahoo
+      .. "&interval=" .. interval.api_yahoo
+      .. "&includePrePost=false"
+  elseif asset.source == "eastmoney" then
+    return "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid="
+      .. url_encode(asset.secid or asset.symbol)
+      .. "&fields1=f1,f2,f3,f4,f5,f6"
+      .. "&fields2=f51,f52,f53,f54,f55,f56,f57,f58"
+      .. "&klt=" .. interval.klt_em
+      .. "&fqt=1&beg=" .. eastmoney_begin(interval) .. "&end=20500101&lmt=" .. tostring(DEFAULT_LIMIT)
+  end
+  return nil, "source unsupported"
+end
+
+-- 按来源选择解析器。
+local function parse_by_source(asset, doc)
+  if asset.source == "binance" then
+    return parse_binance(doc, asset)
+  elseif asset.source == "yahoo" then
+    return parse_yahoo(doc, asset)
+  elseif asset.source == "eastmoney" then
+    return parse_eastmoney(doc, asset)
+  end
+  return nil, "source unsupported"
+end
+
+-- 推断 A 股市场编号；Web 仍可显式覆盖。
+local function infer_eastmoney_market(symbol)
+  symbol = tostring(symbol or "")
+  if symbol:sub(1, 1) == "6" or symbol:sub(1, 1) == "9" then
+    return "1"
+  end
+  return "0"
+end
+
+-- Eastmoney 的 market 前缀同时覆盖 A 股、海外指数/股票和国际期货。
+local function normalize_eastmoney_market(market, symbol)
+  market = trim(market)
+  if market == "0" or market == "1" or market == "100" or market == "101" or market == "105" then
+    return market
+  end
+  return infer_eastmoney_market(symbol)
+end
+
+-- 根据 Eastmoney market 前缀决定 Web 分类和显示币种。
+local function eastmoney_meta(market)
+  if market == "100" or market == "105" then
+    return "nasdaq", "USD"
+  elseif market == "101" then
+    return "metal", "USD"
+  end
+  return "ashare", "CNY"
+end
+
+-- 创建 Web 输入的自定义资产。
+local function make_custom_asset(params)
+  local source = trim(params.source)
+  local symbol = trim(params.symbol)
+  if source == "" or symbol == "" then
+    return nil, "source/symbol required"
+  end
+
+  local text = trim(params.name)
+  if text == "" then
+    text = symbol
+  end
+
+  if source == "binance" then
+    symbol = symbol:upper()
+    return {
+      id = "custom:binance:" .. symbol,
+      group = "crypto",
+      source = "binance",
+      symbol = symbol,
+      text = text,
+      quote = "USD",
+    }
+  elseif source == "yahoo" then
+    symbol = symbol:upper()
+    local group = params.group == "metal" and "metal" or "nasdaq"
+    return {
+      id = "custom:yahoo:" .. symbol,
+      group = group,
+      source = "yahoo",
+      symbol = symbol,
+      text = text,
+      quote = "USD",
+      metal_unit = group == "metal" and infer_metal_unit(symbol) or nil,
+    }
+  elseif source == "eastmoney" then
+    symbol = symbol:upper()
+    local market = normalize_eastmoney_market(params.market, symbol)
+    local group, quote = eastmoney_meta(market)
+    local secid = market .. "." .. symbol
+    return {
+      id = "custom:eastmoney:" .. secid,
+      group = group,
+      source = "eastmoney",
+      symbol = symbol,
+      secid = secid,
+      text = text,
+      quote = quote,
+      metal_unit = group == "metal" and infer_metal_unit(symbol) or nil,
+    }
+  end
+
+  return nil, "source unsupported"
+end
+
+-- 构造 backend 实例。
+function Backend.new(opts)
+  opts = opts or {}
+  local self = {
+    version = opts.version or "dev",
+    app_id = opts.app_id or "btc",
+    config_path = opts.config_path or "/sd/apps/btc/settings.json",
+    assets = PRESET_ASSETS,
+    intervals = INTERVALS,
+    settings = {
+      asset_id = "crypto:BTCUSDT",
+      interval = "5m",
+      mode = "line",
+      currency = "USD",
+      ma_period = 0,
+    },
+    custom_asset = nil,
+    state = {
+      valid = false,
+      loading = false,
+      http_busy = false,
+      http_job = "",
+      http_req_id = 0,
+      http_started_ms = 0,
+      status = "cold",
+      tone = "idle",
+      last_error = "",
+      last_http_code = 0,
+      candles = {},
+      closes = {},
+      min_price = nil,
+      max_price = nil,
+      current_price = nil,
+      prev_close = nil,
+      change = nil,
+      change_pct = nil,
+      currency = "",
+      fx_rate = FX_FALLBACK_USD_CNY,
+      fx_updated_text = "--",
+      fx_last_error = "",
+      fx_next_fetch_at = 0,
+      fx_loading = false,
+      last_update_ms = 0,
+      last_update_text = "--:--:--",
+      next_fetch_at = 0,
+      chart_dirty = true,
+    },
+  }
+
+  -- 查找预设或自定义资产。
+  function self:find_asset(id)
+    if self.custom_asset and self.custom_asset.id == id then
+      return self.custom_asset
+    end
+    for i = 1, #self.assets do
+      if self.assets[i].id == id then
+        return self.assets[i]
+      end
+    end
+    return nil
+  end
+
+  -- 返回当前资产，配置异常时回到第一个预设。
+  function self:current_asset()
+    return self:find_asset(self.settings.asset_id) or self.assets[1]
+  end
+
+  -- 生成需要持久化的轻量配置，行情数据不写入 SD。
+  function self:config_payload()
+    return {
+      asset_id = self.settings.asset_id,
+      interval = self.settings.interval,
+      mode = self.settings.mode,
+      currency = self.settings.currency,
+      ma_period = self.settings.ma_period,
+      custom_asset = public_asset(self.custom_asset),
+    }
+  end
+
+  -- 从 app 自己目录读取上次设置；失败时安静回到默认配置。
+  function self:load_settings()
+    if not self.config_path or self.config_path == "" or not file or not file.getcontents then
+      return false
+    end
+    local ok, raw = pcall(function()
+      return file.getcontents(self.config_path)
+    end)
+    if not ok or type(raw) ~= "string" or raw == "" then
+      return false
+    end
+
+    local cfg, err = decode_json(raw)
+    if type(cfg) ~= "table" then
+      print("[btc_backend] load settings failed: " .. tostring(err or "bad config"))
+      return false
+    end
+
+    local custom = restore_custom_asset(cfg.custom_asset)
+    if custom then
+      self.custom_asset = custom
+    end
+
+    local asset_id = cfg.asset_id or cfg.asset
+    if asset_id and self:find_asset(asset_id) then
+      self.settings.asset_id = asset_id
+    end
+    if cfg.interval then
+      local interval = find_interval(cfg.interval)
+      if interval then
+        self.settings.interval = interval.label
+      end
+    end
+    if cfg.mode then
+      local mode = normalize_mode(cfg.mode)
+      if mode then
+        self.settings.mode = mode
+      end
+    end
+    if cfg.currency then
+      self.settings.currency = normalize_currency(cfg.currency)
+    end
+    local ma_period = normalize_ma_period(cfg.ma_period or cfg.ma)
+    if ma_period ~= nil then
+      self.settings.ma_period = ma_period
+    end
+
+    self.state.chart_dirty = true
+    return true
+  end
+
+  -- 保存 Web 或实体按键改动后的配置。
+  function self:save_settings()
+    if not self.config_path or self.config_path == "" or not file or not file.putcontents then
+      return false
+    end
+    local raw, err = encode_json(self:config_payload())
+    if not raw then
+      print("[btc_backend] save settings encode failed: " .. tostring(err))
+      return false
+    end
+    local ok, ret = pcall(function()
+      return file.putcontents(self.config_path, raw)
+    end)
+    if not ok or not ret then
+      print("[btc_backend] save settings failed: " .. tostring(ok and ret or ret))
+      return false
+    end
+    return true
+  end
+
+  -- 清空旧走势，切换资产或周期时调用。
+  function self:clear_data(status)
+    local s = self.state
+    s.valid = false
+    s.status = status or "loading"
+    s.tone = "warn"
+    s.last_error = ""
+    s.candles = {}
+    s.closes = {}
+    s.min_price = nil
+    s.max_price = nil
+    s.current_price = nil
+    s.prev_close = nil
+    s.change = nil
+    s.change_pct = nil
+    s.chart_dirty = true
+  end
+
+  -- 请求尽快刷新。
+  function self:queue_refresh()
+    self.state.next_fetch_at = 0
+  end
+
+  -- 标记图表已绘制。
+  function self:clear_chart_dirty()
+    self.state.chart_dirty = false
+  end
+
+  -- 应用解析后的统一行情数据。
+  function self:apply_parsed(asset, parsed)
+    local s = self.state
+    local current = tonumber(parsed.current_price) or parsed.closes[#parsed.closes]
+    local base = tonumber(parsed.prev_close) or tonumber(parsed.first_price) or current
+
+    s.valid = true
+    s.loading = false
+    s.status = "ready"
+    s.tone = current and base and current < base and "down" or "up"
+    s.last_error = ""
+    s.last_http_code = 200
+    s.candles = parsed.candles or {}
+    s.closes = parsed.closes or {}
+    s.min_price = parsed.min_price
+    s.max_price = parsed.max_price
+    s.current_price = current
+    s.prev_close = base
+    s.change = current and base and (current - base) or nil
+    if current and base and base ~= 0 then
+      s.change_pct = (current - base) * 100 / base
+    else
+      s.change_pct = nil
+    end
+    s.currency = parsed.currency or asset.quote or ""
+    s.last_update_ms = now_ms()
+    s.last_update_text = clock_text()
+    s.next_fetch_at = now_ms() + MAIN_REFRESH_MS
+    s.chart_dirty = true
+  end
+
+  -- 记录请求失败并安排较短重试。
+  function self:fail(message, code)
+    local s = self.state
+    s.loading = false
+    s.status = "error"
+    s.tone = "error"
+    s.last_error = short_text(message or "request failed", 120)
+    s.last_http_code = tonumber(code) or -1
+    s.next_fetch_at = now_ms() + ERROR_RETRY_MS
+    s.chart_dirty = true
+  end
+
+  -- 记录汇率同步失败，保留兜底汇率，30 分钟后再试。
+  function self:fail_fx(message)
+    local s = self.state
+    s.fx_loading = false
+    s.fx_last_error = short_text(message or "fx failed", 80)
+    s.fx_next_fetch_at = now_ms() + FX_REFRESH_MS
+  end
+
+  -- 应用 USD/CNY 汇率，切换人民币显示时自动重绘图表。
+  function self:apply_fx(rate)
+    local s = self.state
+    s.fx_rate = tonumber(rate) or s.fx_rate or FX_FALLBACK_USD_CNY
+    s.fx_updated_text = clock_text()
+    s.fx_last_error = ""
+    s.fx_next_fetch_at = now_ms() + FX_REFRESH_MS
+    s.fx_loading = false
+    s.chart_dirty = true
+  end
+
+  -- 发起一次 JSON GET，请求结束后调用 callback。
+  function self:request_json(job, url, callback)
+    local s = self.state
+    if s.http_busy then
+      return false
+    end
+    if not http or not http.get then
+      self:fail("http missing", -1)
+      return false
+    end
+
+    s.http_busy = true
+    s.http_job = job
+    self.request_seq = (self.request_seq or 0) + 1
+    local req_id = self.request_seq
+    s.http_req_id = req_id
+    s.http_started_ms = now_ms()
+    if job == "fx" then
+      s.fx_loading = true
+    else
+      s.loading = true
+      s.status = "loading"
+      s.tone = "warn"
+    end
+
+    local accept_encoding = "identity"
+    if zlib and zlib.isgzip and zlib.gunzip then
+      accept_encoding = "gzip, identity"
+    end
+    local headers =
+      "Accept: application/json\r\n"
+      .. "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8\r\n"
+      .. "Accept-Encoding: " .. accept_encoding .. "\r\n"
+      .. "Cache-Control: no-cache\r\n"
+      .. "Pragma: no-cache\r\n"
+      .. "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36\r\n"
+
+    http.get(url, headers, function(code, body, resp_headers)
+      if s.http_req_id ~= req_id then
+        return
+      end
+      s.http_busy = false
+      s.http_job = ""
+      s.http_started_ms = 0
+      if job == "fx" then
+        s.fx_loading = false
+      end
+
+      if code ~= 200 then
+        callback(false, nil, "http " .. tostring(code), code)
+        return
+      end
+      if type(body) ~= "string" or body == "" then
+        callback(false, nil, "empty body", code)
+        return
+      end
+
+      local plain, derr = maybe_decompress(body, resp_headers)
+      if not plain then
+        callback(false, nil, derr or "decode body", code)
+        return
+      end
+
+      if job == "eastmoney" then
+        callback(true, plain, nil, code)
+        return
+      end
+
+      local doc, jerr = decode_json(plain)
+      if not doc then
+        callback(false, nil, "json " .. tostring(jerr), code)
+        return
+      end
+
+      callback(true, doc, nil, code)
+    end)
+
+    return true
+  end
+
+  -- 拉取当前资产走势，所有来源统一走串行请求。
+  function self:fetch_current()
+    if self.state.http_busy then
+      return false
+    end
+
+    local asset = self:current_asset()
+    local interval = find_interval(self.settings.interval)
+    local url, uerr = build_url(asset, interval)
+    if not url then
+      self:fail(uerr or "bad url", -1)
+      return false
+    end
+
+    local req_asset_id = asset.id
+    local req_interval = interval.label
+    return self:request_json(asset.source, url, function(ok, doc, err, code)
+      if req_asset_id ~= self.settings.asset_id or req_interval ~= self.settings.interval then
+        return
+      end
+      if not ok then
+        self:fail(err, code)
+        return
+      end
+      local parsed, perr = parse_by_source(asset, doc)
+      if not parsed then
+        self:fail("parse " .. tostring(perr), code)
+        return
+      end
+      self:apply_parsed(asset, parsed)
+    end)
+  end
+
+  -- 开机和每 30 分钟同步一次公开 USD/CNY 汇率。
+  function self:fetch_fx()
+    if self.state.http_busy then
+      return false
+    end
+    return self:request_json("fx", FX_URL, function(ok, doc, err, code)
+      if not ok then
+        self:fail_fx(err or ("fx http " .. tostring(code)))
+        return
+      end
+      local rate, perr = parse_usd_cny(doc)
+      if not rate then
+        self:fail_fx(perr or "fx parse")
+        return
+      end
+      self:apply_fx(rate)
+    end)
+  end
+
+  -- 周期调度入口，由 main.lua 的 timer 调用。
+  function self:tick()
+    local s = self.state
+    if s.http_busy then
+      if s.http_started_ms > 0 and (now_ms() - s.http_started_ms) > HTTP_TIMEOUT_MS then
+        s.http_busy = false
+        local timeout_job = s.http_job
+        s.http_job = ""
+        s.http_req_id = (s.http_req_id or 0) + 1
+        s.http_started_ms = 0
+        if timeout_job == "fx" then
+          self:fail_fx("http timeout")
+        else
+          self:fail("http timeout", -1)
+        end
+      end
+      return
+    end
+    if now_ms() >= (s.next_fetch_at or 0) then
+      if self:fetch_current() then
+        return
+      end
+    end
+    if now_ms() >= (s.fx_next_fetch_at or 0) then
+      self:fetch_fx()
+    end
+  end
+
+  -- 切换资产，delta 用于实体按键。
+  function self:select_asset_delta(delta)
+    local idx = 1
+    for i = 1, #self.assets do
+      if self.assets[i].id == self.settings.asset_id then
+        idx = i
+        break
+      end
+    end
+    idx = idx + (tonumber(delta) or 1)
+    if idx < 1 then idx = #self.assets end
+    if idx > #self.assets then idx = 1 end
+    self:apply_settings({ asset = self.assets[idx].id }, true)
+  end
+
+  -- 切换周期，delta 用于实体按键。
+  function self:select_interval_delta(delta)
+    local _, idx = find_interval(self.settings.interval)
+    idx = idx + (tonumber(delta) or 1)
+    if idx < 1 then idx = #self.intervals end
+    if idx > #self.intervals then idx = 1 end
+    self:apply_settings({ interval = self.intervals[idx].label }, true)
+  end
+
+  -- 切换图表模式，按键长按和 Web 选择共用。
+  function self:set_mode(mode)
+    local normalized = normalize_mode(mode)
+    if normalized and normalized ~= self.settings.mode then
+      self.settings.mode = normalized
+      self.state.chart_dirty = true
+      self:save_settings()
+    end
+  end
+
+  -- 折线/K 线互切。
+  function self:toggle_mode()
+    if self.settings.mode == "candle" then
+      self:set_mode("line")
+    else
+      self:set_mode("candle")
+    end
+  end
+
+  -- 应用 Web 或按键传入的设置。
+  function self:apply_settings(params, refresh)
+    params = params or {}
+    local data_changed = false
+    local chart_changed = false
+    local settings_changed = false
+
+    if params.source and params.symbol and trim(params.symbol) ~= "" then
+      local custom, err = make_custom_asset(params)
+      if custom then
+        self.custom_asset = custom
+        params.asset = custom.id
+        settings_changed = true
+      else
+        self:fail(err or "bad custom asset", -1)
+        return false
+      end
+    end
+
+    local asset_id = params.asset or params.asset_id
+    if asset_id and self:find_asset(asset_id) and asset_id ~= self.settings.asset_id then
+      self.settings.asset_id = asset_id
+      data_changed = true
+      settings_changed = true
+    end
+
+    if params.interval then
+      local interval = find_interval(params.interval)
+      if interval and interval.label ~= self.settings.interval then
+        self.settings.interval = interval.label
+        data_changed = true
+        settings_changed = true
+      end
+    end
+
+    if params.mode then
+      local mode = normalize_mode(params.mode)
+      if mode and mode ~= self.settings.mode then
+        self.settings.mode = mode
+        chart_changed = true
+        settings_changed = true
+      end
+    end
+
+    if params.ma or params.ma_period then
+      local ma_period = normalize_ma_period(params.ma or params.ma_period)
+      if ma_period ~= nil and ma_period ~= self.settings.ma_period then
+        self.settings.ma_period = ma_period
+        chart_changed = true
+        settings_changed = true
+      end
+    end
+
+    if params.currency or params.display_currency then
+      local currency = normalize_currency(params.currency or params.display_currency)
+      if currency ~= self.settings.currency then
+        self.settings.currency = currency
+        chart_changed = true
+        settings_changed = true
+      end
+    end
+
+    if data_changed then
+      self:clear_data("switching")
+    elseif chart_changed then
+      self.state.chart_dirty = true
+    end
+    if data_changed or (refresh and not chart_changed) then
+      self:queue_refresh()
+    end
+    if settings_changed then
+      self:save_settings()
+    end
+    return true
+  end
+
+  -- 生成给 Web 和屏幕端复用的状态快照。
+  function self:snapshot()
+    local s = self.state
+    local asset = self:current_asset()
+    local interval = find_interval(self.settings.interval)
+    local assets = {}
+    for i = 1, #self.assets do
+      assets[#assets + 1] = public_asset(self.assets[i])
+    end
+    if self.custom_asset then
+      assets[#assets + 1] = public_asset(self.custom_asset)
+    end
+
+    local intervals = {}
+    for i = 1, #self.intervals do
+      intervals[#intervals + 1] = { label = self.intervals[i].label }
+    end
+
+    local target_currency = normalize_currency(self.settings.currency)
+    local fx_rate = tonumber(s.fx_rate) or FX_FALLBACK_USD_CNY
+    local points = {}
+    local display_min = nil
+    local display_max = nil
+    local start_i = 1
+    if #s.candles > DEFAULT_LIMIT then
+      start_i = #s.candles - DEFAULT_LIMIT + 1
+    end
+    for i = start_i, #s.candles do
+      local c = s.candles[i]
+      local close_p = display_price(asset, c.close, target_currency, fx_rate)
+      if close_p then
+        local open_p = display_price(asset, c.open, target_currency, fx_rate) or close_p
+        local high_p = display_price(asset, c.high, target_currency, fx_rate) or math.max(open_p, close_p)
+        local low_p = display_price(asset, c.low, target_currency, fx_rate) or math.min(open_p, close_p)
+        if low_p and (not display_min or low_p < display_min) then
+          display_min = low_p
+        end
+        if high_p and (not display_max or high_p > display_max) then
+          display_max = high_p
+        end
+        points[#points + 1] = {
+          time = c.time,
+          open = open_p,
+          high = high_p,
+          low = low_p,
+          close = close_p,
+        }
+      end
+    end
+
+    local display_current = display_price(asset, s.current_price, target_currency, fx_rate)
+    if not display_current and #points > 0 then
+      display_current = points[#points].close
+    end
+    local display_prev = display_price(asset, s.prev_close, target_currency, fx_rate)
+    local display_change = display_current and display_prev and (display_current - display_prev) or nil
+    local display_pct = s.change_pct
+    if not display_pct and display_current and display_prev and display_prev ~= 0 then
+      display_pct = (display_current - display_prev) * 100 / display_prev
+    end
+    display_min = display_min or display_price(asset, s.min_price, target_currency, fx_rate)
+    display_max = display_max or display_price(asset, s.max_price, target_currency, fx_rate)
+
+    return {
+      ok = true,
+      version = self.version,
+      app_id = self.app_id,
+      assets = assets,
+      intervals = intervals,
+      currencies = public_currencies(),
+      active = public_asset(asset),
+      settings = {
+        asset = asset.id,
+        interval = interval.label,
+        mode = self.settings.mode,
+        currency = target_currency,
+        ma = self.settings.ma_period > 0 and tostring(self.settings.ma_period) or "off",
+        ma_period = self.settings.ma_period,
+      },
+      mode_text = mode_text(self.settings.mode),
+      valid = s.valid,
+      loading = s.loading or (s.http_busy and s.http_job ~= "fx"),
+      status = s.status,
+      tone = s.tone,
+      error = s.last_error,
+      http_code = s.last_http_code,
+      price = display_current,
+      price_text = fmt_price(display_current),
+      change = display_change,
+      change_text = fmt_signed(display_change),
+      change_pct = display_pct,
+      change_pct_text = fmt_pct(display_pct),
+      currency = target_currency,
+      currency_text = currency_text(target_currency),
+      source_currency = s.currency or asset.quote or "",
+      unit_text = unit_text(asset),
+      min_price = display_min,
+      max_price = display_max,
+      min_price_text = fmt_price(display_min),
+      max_price_text = fmt_price(display_max),
+      updated_text = s.last_update_text,
+      now_text = clock_text(),
+      fx_rate = fx_rate,
+      fx_updated_text = s.fx_updated_text,
+      fx_loading = s.fx_loading,
+      fx_error = s.fx_last_error,
+      next_fetch_in_s = math.max(0, math.floor(((s.next_fetch_at or 0) - now_ms() + 999) / 1000)),
+      chart_dirty = s.chart_dirty,
+      points = points,
+    }
+  end
+
+  -- 停止后端，当前实现无持久资源，只保留接口对称。
+  function self:stop(reason)
+    self.state.http_busy = false
+    self.state.loading = false
+  end
+
+  self:load_settings()
+  return self
+end
+
+return Backend

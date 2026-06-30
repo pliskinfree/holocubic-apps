@@ -1,0 +1,4 @@
+name = plane
+entry = main.lua
+icon = main.png
+description = plane war game
