@@ -3,23 +3,24 @@
     end
 
     WEATHER_APP = {
-    VERSION = "2026-04-27-weather-image-card-v1",
+    VERSION = "2026-05-09-weather-cubicserver-v1",
     DEBUG = false,
 
     SCREEN_W = 320,
     SCREEN_H = 240,
 
-    WEATHER_HOST = "https://r77qqrtvyu.re.qweatherapi.com",
-    WEATHER_KEY = "3f5e087b49904de8a44961597d4263db",
-    WEATHER_LOCATION = "101210401",
+    SETTINGS_PATH = "/sd/apps/settings.json",
+    DEFAULT_TIMEZONE = "CST-8",
+    WEATHER_NOW_PATH = "/v1/weather/now",
+    WEATHER_LOCATION = "",
     WEATHER_FETCH_MS = 60000,
     FORECAST_FETCH_MS = 10 * 60000,
     TIME_SYNC_RETRY_MS = 30000,
 
-    TZ_OFFSET_SEC = 8 * 3600,
-    TIMEZONE = "CST-8",
+    TZ_OFFSET_SEC = 0,
+    TIMEZONE = "UTC0",
     NTP_SERVER = "pool.ntp.org",
-    CITY_NAME = "Ningbo",
+    CITY_NAME = "Weather",
 
     ASSET_DIR = "/sd/apps/weather/assets",
     }
@@ -135,6 +136,349 @@
         return pcall_fn(fn, ...)
     end
     return false
+    end
+
+    local function trim(text)
+    if text == nil then
+        return ""
+    end
+    return tostring(text):match("^%s*(.-)%s*$") or ""
+    end
+
+    local function read_text(path)
+    if not file then
+        return nil
+    end
+    if file.getcontents then
+        local ok, raw = pcall_fn(function()
+        return file.getcontents(path)
+        end)
+        if ok and type(raw) == "string" then
+        return raw
+        end
+    end
+    if not file.open then
+        return nil
+    end
+    local fd = file.open(path, "r")
+    if not fd then
+        return nil
+    end
+    local chunks = {}
+    while true do
+        local part = fd:read(512)
+        if not part or part == "" then
+        break
+        end
+        chunks[#chunks + 1] = part
+    end
+    fd:close()
+    return table.concat(chunks)
+    end
+
+    local function decode_json(raw)
+    if type(raw) ~= "string" or raw == "" then
+        return nil
+    end
+    if json and json.decode then
+        local ok, doc = pcall_fn(function()
+        return json.decode(raw)
+        end)
+        if ok and type(doc) == "table" then
+        return doc
+        end
+    end
+    if sjson and sjson.decode then
+        local ok, doc = pcall_fn(function()
+        return sjson.decode(raw)
+        end)
+        if ok and type(doc) == "table" then
+        return doc
+        end
+    end
+    return nil
+    end
+
+    local function url_encode(text)
+    text = tostring(text or "")
+    return (text:gsub("([^%w%-%._~])", function(ch)
+        return string_format("%%%02X", string.byte(ch))
+    end))
+    end
+
+    local function is_digit_char(ch)
+    return ch and ch:match("%d") ~= nil
+    end
+
+    local function parse_posix_offset(text, index)
+    text = tostring(text or "")
+    local i = index or 1
+    local sign = 1
+    local ch = text:sub(i, i)
+    if ch == "+" then
+        i = i + 1
+    elseif ch == "-" then
+        sign = -1
+        i = i + 1
+    end
+
+    local start_i = i
+    while is_digit_char(text:sub(i, i)) do
+        i = i + 1
+    end
+    if i == start_i then
+        return nil, index
+    end
+
+    local hours = tonumber(text:sub(start_i, i - 1)) or 0
+    local minutes = 0
+    local seconds = 0
+    if text:sub(i, i) == ":" then
+        i = i + 1
+        start_i = i
+        while is_digit_char(text:sub(i, i)) do
+        i = i + 1
+        end
+        minutes = tonumber(text:sub(start_i, i - 1)) or 0
+        if text:sub(i, i) == ":" then
+        i = i + 1
+        start_i = i
+        while is_digit_char(text:sub(i, i)) do
+            i = i + 1
+        end
+        seconds = tonumber(text:sub(start_i, i - 1)) or 0
+        end
+    end
+
+    return -(sign * (hours * 3600 + minutes * 60 + seconds)), i
+    end
+
+    local function parse_tz_name(text, index)
+    text = tostring(text or "")
+    local i = index or 1
+    local start_i = i
+    while text:sub(i, i):match("%a") do
+        i = i + 1
+    end
+    if i == start_i then
+        return nil, index
+    end
+    return text:sub(start_i, i - 1), i
+    end
+
+    local function posix_tz_offset_sec(tz)
+    local _, index = parse_tz_name(trim(tz), 1)
+    local offset = parse_posix_offset(trim(tz), index or 1)
+    return offset or 0
+    end
+
+    local function is_leap_year(year)
+    return (year % 4 == 0 and year % 100 ~= 0) or (year % 400 == 0)
+    end
+
+    local function days_in_month(year, mon)
+    if mon == 2 then
+        return is_leap_year(year) and 29 or 28
+    end
+    local days = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
+    return days[mon] or 30
+    end
+
+    local function days_before_year(year)
+    local days = 0
+    local y = 1970
+    while y < year do
+        days = days + (is_leap_year(y) and 366 or 365)
+        y = y + 1
+    end
+    return days
+    end
+
+    local function days_before_month(year, mon)
+    local days = 0
+    local m = 1
+    while m < mon do
+        days = days + days_in_month(year, m)
+        m = m + 1
+    end
+    return days
+    end
+
+    local function weekday(year, mon, day)
+    local days = days_before_year(year) + days_before_month(year, mon) + day - 1
+    return (days + 4) % 7
+    end
+
+    local function year_from_epoch(sec)
+    local days = math_floor((tonumber(sec) or 0) / 86400)
+    local year = 1970
+    while true do
+        local year_days = is_leap_year(year) and 366 or 365
+        if days < year_days then
+        return year
+        end
+        days = days - year_days
+        year = year + 1
+    end
+    end
+
+    local function local_epoch(year, mon, day, hour, min, sec)
+    local days = days_before_year(year) + days_before_month(year, mon) + day - 1
+    return days * 86400 + (hour or 0) * 3600 + (min or 0) * 60 + (sec or 0)
+    end
+
+    local function parse_rule_time(text)
+    text = trim(text)
+    if text == "" then
+        return 2 * 3600
+    end
+
+    local sign = 1
+    if text:sub(1, 1) == "-" then
+        sign = -1
+        text = text:sub(2)
+    elseif text:sub(1, 1) == "+" then
+        text = text:sub(2)
+    end
+
+    local h, m, s = text:match("^(%d+):(%d+):(%d+)$")
+    if not h then
+        h, m = text:match("^(%d+):(%d+)$")
+    end
+    if not h then
+        h = text:match("^(%d+)$")
+    end
+    if not h then
+        return 2 * 3600
+    end
+    return sign * ((tonumber(h) or 0) * 3600 + (tonumber(m) or 0) * 60 + (tonumber(s) or 0))
+    end
+
+    local function parse_dst_rule(text)
+    local rule_text, time_text = tostring(text or ""):match("^([^/]+)/*(.*)$")
+    local mon, week, dow = tostring(rule_text or ""):match("^M(%d+)%.(%d+)%.(%d+)$")
+    if not mon then
+        return nil
+    end
+    return {
+        mon = tonumber(mon),
+        week = tonumber(week),
+        dow = tonumber(dow),
+        time_sec = parse_rule_time(time_text),
+    }
+    end
+
+    local function transition_day(year, rule)
+    local first_dow = weekday(year, rule.mon, 1)
+    local day = 1 + ((rule.dow - first_dow + 7) % 7) + (rule.week - 1) * 7
+    local max_day = days_in_month(year, rule.mon)
+    if rule.week == 5 and day > max_day then
+        day = day - 7
+    end
+    return day
+    end
+
+    local function transition_utc(year, rule, offset_before)
+    local day = transition_day(year, rule)
+    return local_epoch(year, rule.mon, day, 0, 0, rule.time_sec) - offset_before
+    end
+
+    local function parse_posix_timezone(tz)
+    tz = trim(tz)
+    local std_name, index = parse_tz_name(tz, 1)
+    if not std_name then
+        return nil
+    end
+    local std_offset, next_index = parse_posix_offset(tz, index)
+    if not std_offset then
+        return nil
+    end
+    index = next_index
+
+    local dst_name
+    dst_name, index = parse_tz_name(tz, index)
+    if not dst_name then
+        return { std_offset = std_offset }
+    end
+
+    local dst_offset = std_offset + 3600
+    local ch = tz:sub(index, index)
+    if ch ~= "," and ch ~= "" then
+        local explicit_offset, explicit_index = parse_posix_offset(tz, index)
+        if explicit_offset then
+        dst_offset = explicit_offset
+        index = explicit_index
+        end
+    end
+    if tz:sub(index, index) ~= "," then
+        return { std_offset = std_offset }
+    end
+
+    local rules = tz:sub(index + 1)
+    local comma = rules:find(",", 1, true)
+    if not comma then
+        return { std_offset = std_offset }
+    end
+    local start_rule = parse_dst_rule(rules:sub(1, comma - 1))
+    local end_rule = parse_dst_rule(rules:sub(comma + 1))
+    if not start_rule or not end_rule then
+        return { std_offset = std_offset }
+    end
+
+    return {
+        std_offset = std_offset,
+        dst_offset = dst_offset,
+        start_rule = start_rule,
+        end_rule = end_rule,
+    }
+    end
+
+    local function timezone_offset_for_epoch(sec)
+    local parsed = parse_posix_timezone(APP.TIMEZONE)
+    if not parsed then
+        return APP.TZ_OFFSET_SEC or 0
+    end
+    if not parsed.start_rule or not parsed.end_rule then
+        return parsed.std_offset
+    end
+
+    local year = year_from_epoch((tonumber(sec) or 0) + parsed.std_offset)
+    local start_utc = transition_utc(year, parsed.start_rule, parsed.std_offset)
+    local end_utc = transition_utc(year, parsed.end_rule, parsed.dst_offset)
+    local in_dst
+    if start_utc < end_utc then
+        in_dst = sec >= start_utc and sec < end_utc
+    else
+        in_dst = sec >= start_utc or sec < end_utc
+    end
+    return in_dst and parsed.dst_offset or parsed.std_offset
+    end
+
+    local function apply_weather_address(address)
+    address = trim(address)
+    APP.WEATHER_LOCATION = address
+    if address ~= "" and not address:match("^%d+$") then
+        APP.CITY_NAME = address
+    end
+    end
+
+    local function load_runtime_settings()
+    local raw = read_text(APP.SETTINGS_PATH)
+    local doc = decode_json(raw) or {}
+
+    local timezone = trim(doc.timezone)
+    if timezone == "" then
+        timezone = APP.DEFAULT_TIMEZONE
+    end
+    APP.TIMEZONE = timezone
+    APP.TZ_OFFSET_SEC = posix_tz_offset_sec(timezone)
+
+    apply_weather_address(doc.weather_address or doc.weatherAddress)
+
+    local city = trim(doc.weather_city or doc.city_name or doc.city)
+    if city ~= "" then
+        APP.CITY_NAME = city
+    end
     end
 
     local function sd_to_lv(path)
@@ -397,7 +741,7 @@
         return nil
     end
 
-    local ok_cal, year, mon, day, hour, min, sec2 = pcall_fn(rtctime.epoch2cal, sec + APP.TZ_OFFSET_SEC)
+    local ok_cal, year, mon, day, hour, min, sec2 = pcall_fn(rtctime.epoch2cal, sec + timezone_offset_for_epoch(sec))
     if ok_cal and type(year) == "number" and type(hour) == "number" and type(min) == "number" then
         return {
         year = year,
@@ -413,11 +757,16 @@
     end
 
     local function tm_from_os()
-    if not os or not os.date then
+    if not os or not os.date or not os.time then
         return nil
     end
 
-    local ok, t = pcall_fn(os.date, "*t")
+    local ok_now, sec = pcall_fn(os.time)
+    if not ok_now or type(sec) ~= "number" or sec <= 0 then
+        return nil
+    end
+
+    local ok, t = pcall_fn(os.date, "!*t", sec + timezone_offset_for_epoch(sec))
     if ok and type(t) == "table" and t.year and t.mon and t.day and t.year >= 2024 then
         return {
         year = t.year,
@@ -694,6 +1043,8 @@
 
     if lv_snapshot_free then
         call(lv_snapshot_free, APP.state.glass_snapshot)
+    elseif lv_img_free_handle then
+        call(lv_img_free_handle, APP.state.glass_snapshot)
     end
 
     APP.state.glass_snapshot = nil
@@ -706,6 +1057,8 @@
 
     if lv_snapshot_free then
         call(lv_snapshot_free, APP.state.forecast_glass_snapshot)
+    elseif lv_img_free_handle then
+        call(lv_img_free_handle, APP.state.forecast_glass_snapshot)
     end
 
     APP.state.forecast_glass_snapshot = nil
@@ -1010,7 +1363,7 @@
 
     if not root then
         root = lv_scr_act()
-        lv_obj_clean(lv_scr_act())
+        lv_clear()
         local startup_parent = get_startup_parent(root)
         APP.ui.startup_page = create_startup_page(startup_parent)
     end
@@ -1210,7 +1563,7 @@ end
     end
 
     set_fullscreen_overlay_hidden(APP.ui.startup_page, true)
-    local del_fn = rawget(_G, "lv_obj_del")
+    local del_fn = rawget(_G, "lv_obj_del") or rawget(_G, "lv_obj_delete")
     if del_fn then
         if APP.ui.startup_page then
         pcall_fn(function()
@@ -1371,9 +1724,18 @@ end
         return
     end
 
-    if not http or not http.get then
+    local location = trim(APP.WEATHER_LOCATION)
+    if location == "" then
         APP.state.valid = false
-        APP.state.last_error = "HTTP missing"
+        APP.state.last_error = "Weather address missing"
+        render_weather()
+        return
+    end
+    APP.WEATHER_LOCATION = location
+
+    if not http or not http.cubicserver or not http.cubicserver.get then
+        APP.state.valid = false
+        APP.state.last_error = "Cubic HTTP missing"
         render_weather()
         return
     end
@@ -1385,15 +1747,14 @@ end
     APP.state.request_inflight = true
     render_weather()
 
-    local url = APP.WEATHER_HOST
-        .. "/v7/weather/now?location="
-        .. APP.WEATHER_LOCATION
-        .. "&key="
-        .. APP.WEATHER_KEY
+    local url = APP.WEATHER_NOW_PATH
+        .. "?location="
+        .. url_encode(APP.WEATHER_LOCATION)
+        .. "&unit=m"
 
     log("request", url)
 
-    http.get(url, { headers = { ["Accept-Encoding"] = "gzip" } }, function(status_code, body, headers)
+    http.cubicserver.get(url, "Accept-Encoding: gzip\r\n", function(status_code, body, headers)
         APP.state.request_inflight = false
 
         if not APP.running then
@@ -1420,48 +1781,17 @@ end
         return
     end
 
-    if not http or not http.get then
-        APP.state.forecast.valid = false
-        APP.state.forecast.last_error = "HTTP missing"
-        render_forecast()
-        return
-    end
-
     if APP.state.forecast.request_inflight then
         return
     end
 
-    APP.state.forecast.request_inflight = true
+    -- 当前服务器仅提供 /v1/weather/now；禁止继续直连和风天气，避免把第三方 key 放在 Lua 里。
+    APP.state.forecast.valid = false
+    APP.state.forecast.days = {}
+    APP.state.forecast.last_http_code = nil
+    APP.state.forecast.last_error = "Forecast API missing"
+    APP.state.forecast.request_inflight = false
     render_forecast()
-
-    local url = APP.WEATHER_HOST
-        .. "/v7/weather/3d?location="
-        .. APP.WEATHER_LOCATION
-        .. "&key="
-        .. APP.WEATHER_KEY
-
-    log("forecast request", url)
-
-    http.get(url, { headers = { ["Accept-Encoding"] = "gzip" } }, function(status_code, body, headers)
-        APP.state.forecast.request_inflight = false
-
-        if not APP.running then
-        return
-        end
-
-        local plain, err = maybe_gunzip_body(body)
-        if not plain then
-        APP.state.forecast.valid = false
-        APP.state.forecast.last_http_code = status_code
-        APP.state.forecast.last_error = tostring(err)
-        warn("forecast body decode failed", tostring(err))
-        render_forecast()
-        return
-        end
-
-        parse_forecast_body(status_code, plain)
-        render_forecast()
-    end)
     end
 
     local function stop_timers()
@@ -1474,7 +1804,6 @@ end
 
     local runtime_app = rawget(_G, "app")
     local app_exiting_fn = runtime_app and runtime_app.exiting or nil
-    local KEYMOD = rawget(_G, "key")
 
     local function maybe_stop_for_exit()
     if app_exiting_fn then
@@ -1488,60 +1817,37 @@ end
     end
 
     local function is_long_start(evt_type)
-    local long_start = (KEYMOD and KEYMOD.LONG_START) or rawget(_G, "KEY_EVENT_LONG_START") or 3
-    return evt_type == long_start
+    return evt_type == key.LONG_START
     end
 
     local function bind_input()
-    local left_code = (KEYMOD and KEYMOD.LEFT) or rawget(_G, "KEY_LEFT")
-    local right_code = (KEYMOD and KEYMOD.RIGHT) or rawget(_G, "KEY_RIGHT")
+    local left_code = key.LEFT
+    local right_code = key.RIGHT
 
     APP.input.left_code = left_code
     APP.input.right_code = right_code
-    APP.input.mode = "none"
+    APP.input.mode = "key"
 
-    if not left_code or not right_code then
-        return
-    end
-
-    if KEYMOD and KEYMOD.on and KEYMOD.off then
-        KEYMOD.on(left_code, function(evt_type, _)
+    key.on(left_code, function(evt_type, _)
         if APP.running and is_long_start(evt_type) then
             toggle_forecast_page()
         end
-        end)
-        KEYMOD.on(right_code, function(evt_type, _)
+    end)
+    key.on(right_code, function(evt_type, _)
         if APP.running and is_long_start(evt_type) then
             toggle_forecast_page()
         end
-        end)
-        APP.input.mode = "key"
-        return
-    end
-
-    if runtime_app and runtime_app.on then
-        runtime_app.on("key", function(_, evt_type, evt_code, _)
-        if not APP.running or not is_long_start(evt_type) then
-            return
-        end
-        if evt_code == left_code or evt_code == right_code then
-            toggle_forecast_page()
-        end
-        end)
-        APP.input.mode = "app"
-    end
+    end)
     end
 
     local function unbind_input()
-    if APP.input.mode == "key" and KEYMOD and KEYMOD.off then
+    if APP.input.mode == "key" then
         if APP.input.left_code then
-        pcall_fn(function() KEYMOD.off(APP.input.left_code) end)
+        pcall_fn(function() key.off(APP.input.left_code) end)
         end
         if APP.input.right_code then
-        pcall_fn(function() KEYMOD.off(APP.input.right_code) end)
+        pcall_fn(function() key.off(APP.input.right_code) end)
         end
-    elseif APP.input.mode == "app" and runtime_app and runtime_app.on then
-        pcall_fn(function() runtime_app.on("key", nil) end)
     end
 
     APP.input.mode = "none"
@@ -1600,17 +1906,18 @@ end
         _G.WEATHER_APP = nil
     end
 
-    if lv_obj_clean and lv_scr_act and stop_reason ~= "reload" then
-        pcall_fn(function() lv_obj_clean(lv_scr_act()) end)
+    if lv_clear and stop_reason ~= "reload" then
+        pcall_fn(function() lv_clear() end)
     end
     release_fonts()
     end
 
-    if not lv_scr_act or not lv_obj_clean or not lv_obj_create or not lv_label_create or not lv_img_create then
+    if not lv_scr_act or not lv_clear or not lv_obj_create or not lv_label_create or not lv_img_create then
     warn("ui api missing")
     return
     end
 
+    load_runtime_settings()
     init_time_module()
     init_ui()
     render_clock()
