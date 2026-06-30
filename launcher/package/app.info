@@ -1,4 +1,5 @@
 name = Launcher
+version = 1.0.0
 kind = app
 entry = main.lua
 description = Built-in system launcher override
