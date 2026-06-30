@@ -12,6 +12,7 @@
     SETTINGS_PATH = "/sd/apps/settings.json",
     DEFAULT_TIMEZONE = "CST-8",
     WEATHER_NOW_PATH = "/v1/weather/now",
+    WEATHER_3D_PATH = "/v1/weather/3d",
     WEATHER_LOCATION = "",
     WEATHER_FETCH_MS = 60000,
     FORECAST_FETCH_MS = 10 * 60000,
@@ -1785,13 +1786,55 @@ end
         return
     end
 
-    -- 当前服务器仅提供 /v1/weather/now；禁止继续直连和风天气，避免把第三方 key 放在 Lua 里。
-    APP.state.forecast.valid = false
-    APP.state.forecast.days = {}
-    APP.state.forecast.last_http_code = nil
-    APP.state.forecast.last_error = "Forecast API missing"
-    APP.state.forecast.request_inflight = false
+    local state = APP.state.forecast
+    local location = trim(APP.WEATHER_LOCATION)
+    if location == "" then
+        state.valid = false
+        state.days = {}
+        state.last_error = "Weather address missing"
+        render_forecast()
+        return
+    end
+    APP.WEATHER_LOCATION = location
+
+    if not http or not http.cubicserver or not http.cubicserver.get then
+        state.valid = false
+        state.days = {}
+        state.last_error = "Cubic HTTP missing"
+        render_forecast()
+        return
+    end
+
+    state.request_inflight = true
     render_forecast()
+
+    local url = APP.WEATHER_3D_PATH
+        .. "?location="
+        .. url_encode(APP.WEATHER_LOCATION)
+        .. "&unit=m"
+
+    log("forecast request", url)
+
+    http.cubicserver.get(url, "Accept-Encoding: gzip\r\n", function(status_code, body, headers)
+        state.request_inflight = false
+
+        if not APP.running then
+        return
+        end
+
+        local plain, err = maybe_gunzip_body(body)
+        if not plain then
+        state.valid = false
+        state.last_http_code = status_code
+        state.last_error = tostring(err)
+        warn("forecast body decode failed", tostring(err))
+        render_forecast()
+        return
+        end
+
+        parse_forecast_body(status_code, plain)
+        render_forecast()
+    end)
     end
 
     local function stop_timers()
