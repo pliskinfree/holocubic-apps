@@ -308,6 +308,18 @@ local function icon_meta(item, path)
   return meta
 end
 
+local function display_icon_path(item)
+  return app_icon(item) or fallback_sd_icon_path(item, ".png")
+end
+
+local function has_display_icon(item)
+  local path = display_icon_path(item)
+  if not path or path == "" then
+    return false
+  end
+  return icon_meta(item, path) ~= nil
+end
+
 local function fit_zoom(meta, target_size, dim)
   if not meta or not meta.w or not meta.h or meta.w <= 0 or meta.h <= 0 then
     return 256
@@ -355,7 +367,7 @@ local function schedule_anim_done()
 end
 
 local function set_icon(box_id, img_id, item, dim)
-  local path = app_icon(item) or fallback_sd_icon_path(item, ".png")
+  local path = display_icon_path(item)
   style_icon_box(box_id, dim and true or false)
   if path and path ~= "" then
     local ok = pcall(function()
@@ -470,7 +482,13 @@ end
 
 local function load_apps(dir)
   local list = app.list() or {}
-  STATE.apps = list
+  local visible = {}
+  for _, item in ipairs(list) do
+    if has_display_icon(item) then
+      visible[#visible + 1] = item
+    end
+  end
+  STATE.apps = visible
   clamp_index()
   render(dir)
 end

@@ -1,4 +1,2 @@
-name = Weather
-kind = app
+name = weather
 entry = main.lua
-description = QWeather card with device settings
