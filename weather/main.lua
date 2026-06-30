@@ -13,6 +13,7 @@
     DEFAULT_TIMEZONE = "CST-8",
     WEATHER_NOW_PATH = "/v1/weather/now",
     WEATHER_3D_PATH = "/v1/weather/3d",
+    WEATHER_CITY_PATH = "/v1/weather/cities",
     WEATHER_LOCATION = "",
     WEATHER_FETCH_MS = 60000,
     FORECAST_FETCH_MS = 10 * 60000,
@@ -89,6 +90,10 @@
     clock_valid = false,
     last_ntp_retry_ms = -30000,
     request_inflight = false,
+    location_request_inflight = false,
+    location_waiters = {},
+    resolved_location_raw = nil,
+    resolved_location_id = nil,
     ntp_enabled = false,
     glass_snapshot = nil,
     forecast_glass_snapshot = nil,
@@ -1278,14 +1283,20 @@
     call(lv_obj_set_style_border_width, page, 0, MAIN_STYLE)
     call(rawget(_G, "lv_obj_set_style_pad_all"), page, 0, MAIN_STYLE)
 
-    create_img(page, qweather_icon_path_for("partly", "103"), 136, 58, 192)
-    create_label(page, APP.CITY_NAME, FONT_16, C.text, 0, 120, APP.SCREEN_W, ALIGN_CENTER)
-    create_label(page, "Weather", FONT_12, C.text_soft, 0, 145, APP.SCREEN_W, ALIGN_CENTER)
+    APP.ui.startup_icon = create_img(page, qweather_icon_path_for("partly", "103"), 136, 58, 192)
+    APP.ui.startup_city_label = create_label(page, APP.CITY_NAME, FONT_16, C.text, 32, 120, 256, ALIGN_CENTER)
+    APP.ui.startup_title_label = create_label(page, "Weather", FONT_12, C.text_soft, 32, 145, 256, ALIGN_CENTER)
     create_glass_line(page, 118, 170, 84, 1, 42)
 
     APP.state.startup_visible = true
     call(rawget(_G, "lv_obj_move_foreground"), page)
     return page
+    end
+
+    local function refresh_startup_labels()
+    set_label_text(APP.ui.startup_city_label, APP.CITY_NAME)
+    style_label(APP.ui.startup_city_label, FONT_16, C.text, 255, ALIGN_CENTER)
+    style_label(APP.ui.startup_title_label, FONT_12, C.text_soft, 255, ALIGN_CENTER)
     end
 
     local function get_startup_parent(root)
@@ -1378,6 +1389,7 @@
     end
 
     init_fonts()
+    refresh_startup_labels()
 
     APP.ui.bg_img = create_img(root, asset_path("bg", "partly"), 0, 0)
 
@@ -1388,7 +1400,7 @@
     call(lv_obj_set_size, now_page, APP.SCREEN_W, APP.SCREEN_H)
 
     APP.ui.time_label = create_label(now_page, "--:--", FONT_34, C.text, 14, 23, 150, ALIGN_LEFT)
-    APP.ui.city_label = create_label(now_page, APP.CITY_NAME, FONT_16, C.text_soft, 16, 68, 132, ALIGN_LEFT)
+    APP.ui.city_label = create_label(now_page, APP.CITY_NAME, FONT_16, C.text_soft, 16, 68, 166, ALIGN_LEFT)
     APP.ui.cond_label = create_label(now_page, "Waiting", FONT_12, C.text, 16, 90, 132, ALIGN_LEFT)
     APP.ui.date_label = create_label(now_page, "--/--", FONT_12, C.text_soft, 16, 113, 132, ALIGN_LEFT)
 
@@ -1436,6 +1448,7 @@
     local function render_clock()
     set_label_text(APP.ui.time_label, format_clock_text())
     set_label_text(APP.ui.city_label, APP.CITY_NAME)
+    set_label_text(APP.ui.startup_city_label, APP.CITY_NAME)
     set_label_text(APP.ui.date_label, format_date_text())
     end
 
@@ -1579,6 +1592,9 @@ end
     end
     APP.ui.startup_page = nil
     APP.ui.startup_screen = nil
+    APP.ui.startup_icon = nil
+    APP.ui.startup_city_label = nil
+    APP.ui.startup_title_label = nil
     APP.state.startup_visible = false
     end
 
@@ -1720,24 +1736,129 @@ end
     return true
     end
 
-    local function request_weather()
-    if not APP.running then
+    -- 将用户输入的城市名解析成 QWeather location id，避免 now/3d 直接查询城市名失败。
+    local function parse_city_lookup_body(status_code, body, raw_location)
+    if status_code ~= 200 or not body then
+        return nil, "CITY HTTP " .. tostring(status_code)
+    end
+
+    local doc = decode_json(body)
+    if type(doc) ~= "table" then
+        return nil, "CITY JSON"
+    end
+
+    local api_code = tostring(doc.code or "")
+    if api_code ~= "200" then
+        return nil, "CITY API " .. api_code
+    end
+
+    local locations = doc.locations or doc.location
+    if type(locations) ~= "table" then
+        return nil, "CITY EMPTY"
+    end
+
+    local city = locations[1]
+    if type(city) ~= "table" then
+        return nil, "CITY EMPTY"
+    end
+
+    local id = trim(city.id)
+    if id == "" then
+        return nil, "CITY NO ID"
+    end
+
+    APP.state.resolved_location_raw = raw_location
+    APP.state.resolved_location_id = id
+
+    local name = trim(city.name)
+    if name ~= "" then
+        APP.CITY_NAME = name
+        render_clock()
+    end
+
+    return id, nil
+    end
+
+    local function city_name_needs_lookup(raw_location)
+    local city = trim(APP.CITY_NAME)
+    return city == "" or city == "Weather" or city == trim(raw_location)
+    end
+
+    -- 城市名先解析成 location id；数字 id 在缺少显示名时也查一次城市名。
+    local function resolve_weather_location(on_done)
+    local raw_location = trim(APP.WEATHER_LOCATION)
+    if raw_location == "" then
+        on_done(nil, "Weather address missing")
+        return
+    end
+    APP.WEATHER_LOCATION = raw_location
+
+    local is_location_id = raw_location:match("^%d+$") ~= nil
+    if is_location_id and not city_name_needs_lookup(raw_location) then
+        on_done(raw_location, nil)
         return
     end
 
-    local location = trim(APP.WEATHER_LOCATION)
-    if location == "" then
-        APP.state.valid = false
-        APP.state.last_error = "Weather address missing"
-        render_weather()
+    if APP.state.resolved_location_raw == raw_location and trim(APP.state.resolved_location_id) ~= "" then
+        on_done(APP.state.resolved_location_id, nil)
         return
     end
-    APP.WEATHER_LOCATION = location
 
     if not http or not http.cubicserver or not http.cubicserver.get then
-        APP.state.valid = false
-        APP.state.last_error = "Cubic HTTP missing"
-        render_weather()
+        on_done(nil, "Cubic HTTP missing")
+        return
+    end
+
+    local waiters = APP.state.location_waiters
+    if type(waiters) ~= "table" then
+        waiters = {}
+        APP.state.location_waiters = waiters
+    end
+    waiters[#waiters + 1] = on_done
+
+    if APP.state.location_request_inflight then
+        return
+    end
+
+    APP.state.location_request_inflight = true
+    local url = APP.WEATHER_CITY_PATH
+        .. "?location="
+        .. url_encode(raw_location)
+        .. "&number=1&lang=zh"
+
+    log("city request", url)
+
+    http.cubicserver.get(url, "Accept-Encoding: gzip\r\n", function(status_code, body, headers)
+        local callbacks = APP.state.location_waiters or {}
+        APP.state.location_waiters = {}
+        APP.state.location_request_inflight = false
+
+        if not APP.running then
+        return
+        end
+
+        local location_id, err
+        local plain
+        plain, err = maybe_gunzip_body(body)
+        if plain then
+        location_id, err = parse_city_lookup_body(status_code, plain, raw_location)
+        end
+        if not location_id and raw_location:match("^%d+$") then
+        location_id = raw_location
+        err = nil
+        end
+        if not err and not location_id then
+        err = "CITY resolve failed"
+        end
+
+        for _, callback in ipairs(callbacks) do
+        pcall_fn(callback, location_id, err)
+        end
+    end)
+    end
+
+    local function request_weather()
+    if not APP.running then
         return
     end
 
@@ -1748,14 +1869,27 @@ end
     APP.state.request_inflight = true
     render_weather()
 
-    local url = APP.WEATHER_NOW_PATH
+    resolve_weather_location(function(location, err)
+        if not APP.running then
+        return
+        end
+
+        if not location then
+        APP.state.request_inflight = false
+        APP.state.valid = false
+        APP.state.last_error = tostring(err)
+        render_weather()
+        return
+        end
+
+        local url = APP.WEATHER_NOW_PATH
         .. "?location="
-        .. url_encode(APP.WEATHER_LOCATION)
+        .. url_encode(location)
         .. "&unit=m"
 
-    log("request", url)
+        log("request", url)
 
-    http.cubicserver.get(url, "Accept-Encoding: gzip\r\n", function(status_code, body, headers)
+        http.cubicserver.get(url, "Accept-Encoding: gzip\r\n", function(status_code, body, headers)
         APP.state.request_inflight = false
 
         if not APP.running then
@@ -1774,6 +1908,7 @@ end
 
         parse_weather_body(status_code, plain)
         render_weather()
+        end)
     end)
     end
 
@@ -1787,35 +1922,31 @@ end
     end
 
     local state = APP.state.forecast
-    local location = trim(APP.WEATHER_LOCATION)
-    if location == "" then
-        state.valid = false
-        state.days = {}
-        state.last_error = "Weather address missing"
-        render_forecast()
-        return
-    end
-    APP.WEATHER_LOCATION = location
-
-    if not http or not http.cubicserver or not http.cubicserver.get then
-        state.valid = false
-        state.days = {}
-        state.last_error = "Cubic HTTP missing"
-        render_forecast()
-        return
-    end
-
     state.request_inflight = true
     render_forecast()
 
-    local url = APP.WEATHER_3D_PATH
+    resolve_weather_location(function(location, err)
+        if not APP.running then
+        return
+        end
+
+        if not location then
+        state.request_inflight = false
+        state.valid = false
+        state.days = {}
+        state.last_error = tostring(err)
+        render_forecast()
+        return
+        end
+
+        local url = APP.WEATHER_3D_PATH
         .. "?location="
-        .. url_encode(APP.WEATHER_LOCATION)
+        .. url_encode(location)
         .. "&unit=m"
 
-    log("forecast request", url)
+        log("forecast request", url)
 
-    http.cubicserver.get(url, "Accept-Encoding: gzip\r\n", function(status_code, body, headers)
+        http.cubicserver.get(url, "Accept-Encoding: gzip\r\n", function(status_code, body, headers)
         state.request_inflight = false
 
         if not APP.running then
@@ -1834,6 +1965,7 @@ end
 
         parse_forecast_body(status_code, plain)
         render_forecast()
+        end)
     end)
     end
 
