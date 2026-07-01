@@ -3794,23 +3794,6 @@ function initAppManageView(){
       '</body></html>';
   }
 
-  function storeItemVersionText(item){
-    const version = String(item && item.version || "").trim();
-    return version ? "version: " + version : "";
-  }
-
-  function storeItemIntroHtml(item){
-    const name = String(item && (item.name || item.id) || "应用详情");
-    const version = storeItemVersionText(item);
-    return '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">' +
-      '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-      '<style>body{margin:0;padding:28px 24px;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:#15211c;background:#fbfdfc}.version{margin:0 0 8px;color:#68766e;font-size:14px;font-weight:600;letter-spacing:0}h1{margin:0;font-size:30px;line-height:1.12;font-weight:750;letter-spacing:0}</style>' +
-      '</head><body>' +
-      (version ? '<p class="version">' + escapeHtml(version) + '</p>' : '') +
-      '<h1>' + escapeHtml(name) + '</h1>' +
-      '</body></html>';
-  }
-
   function normalizeServerUrl(value){
     const text = String(value || "").trim().replace(/\/+$/, "");
     if(!text){
@@ -4515,7 +4498,7 @@ function initAppManageView(){
       detailBtn.type = "button";
       detailBtn.textContent = "介绍";
       detailBtn.addEventListener("click", () => {
-        openStoreDetailHtmlModal(storeItemIntroHtml(item), item.name, storeItemVersionText(item), detailBtn);
+        openStoreDetailModal(infoUrl, item.name, detailBtn);
       });
       actions.appendChild(detailBtn);
     }else if(canUseLocalStoreInfo(item)){
