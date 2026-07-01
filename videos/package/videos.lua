@@ -1,3 +1,13 @@
+local prev = rawget(_G, "VIDEOS_APP")
+if prev and prev.shutdown then
+  pcall(function()
+    prev.shutdown("reload")
+  end)
+end
+
+VIDEOS_APP = {}
+local APP = VIDEOS_APP
+
 local root = lv_scr_act()
 lv_obj_clean(lv_scr_act())
 
@@ -94,24 +104,19 @@ end
 show_gif()
 
 local long_repeat_state = {}
-local KEY_EVENT_START = 1
-local KEY_EVENT_SHORT = 2
-local KEY_EVENT_LONG_START = 3
-local KEY_EVENT_LONG_REPEAT = 4
-local KEY_EVENT_LONG_END = 5
 local last_tick_log_ms = -1000000
 
 local function confirm_left(ts_ms)
   index = index - 1
   show_gif()
-  last_switch = ts_ms
+  last_switch = ts_ms or (millis() or 0)
   print("KEY_LEFT_CONFIRM")
 end
 
 local function confirm_right(ts_ms)
   index = index + 1
   show_gif()
-  last_switch = ts_ms
+  last_switch = ts_ms or (millis() or 0)
   print("KEY_RIGHT_CONFIRM")
 end
 
@@ -120,32 +125,32 @@ local function reset_repeat_state(evt_code)
 end
 
 local function should_trigger_press(evt_type, evt_code)
-  if evt_type == KEY_EVENT_START then
+  if evt_type == key.START then
     reset_repeat_state(evt_code)
     return true
-  elseif evt_type == KEY_EVENT_LONG_START then
+  elseif evt_type == key.LONG_START then
     long_repeat_state[evt_code] = {count = 0}
     return false
-  elseif evt_type == KEY_EVENT_LONG_REPEAT then
+  elseif evt_type == key.LONG_REPEAT then
     local state = long_repeat_state[evt_code] or {count = 0}
     state.count = state.count + 1
     long_repeat_state[evt_code] = state
     if state.count == 1 or (state.count % 5 == 0) then
       return true
     end
-  elseif evt_type == KEY_EVENT_LONG_END then
+  elseif evt_type == key.LONG_END then
     reset_repeat_state(evt_code)
   end
   return false
 end
 
-app.on("key", function(name, evt_type, evt_code, ts_ms)
+local function handle_key(evt_code, evt_type, ts_ms)
   if #gifs == 0 then return end
 
   local dir = nil
-  if evt_code == KEY_LEFT then
+  if evt_code == key.LEFT then
     dir = "left"
-  elseif evt_code == KEY_RIGHT then
+  elseif evt_code == key.RIGHT then
     dir = "right"
   else
     return
@@ -158,6 +163,10 @@ app.on("key", function(name, evt_type, evt_code, ts_ms)
   else
     confirm_right(ts_ms)
   end
+end
+
+key.on(function(evt_code, evt_type, ts_ms)
+  handle_key(evt_code, evt_type, ts_ms)
 end)
 
 local tick_timer = tmr.create()
@@ -175,3 +184,19 @@ tick_timer:alarm(20, tmr.ALARM_AUTO, function()
   end
   -- ptint ("SCRIPT :  tick_20ms \n")
 end)
+
+function APP.shutdown(reason)
+  pcall(function() key.off() end)
+
+  if tick_timer then
+    pcall(function() tick_timer:stop() end)
+    pcall(function() tick_timer:unregister() end)
+    tick_timer = nil
+  end
+
+  if rawget(_G, "VIDEOS_APP") == APP then
+    _G.VIDEOS_APP = nil
+  end
+end
+
+APP.stop = APP.shutdown
