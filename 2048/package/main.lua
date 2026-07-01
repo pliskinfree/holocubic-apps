@@ -1,5 +1,48 @@
+local prev = rawget(_G, "APP_2048")
+if prev and prev.stop then
+  pcall(function()
+    prev.stop("reload")
+  end)
+end
+
+APP_2048 = {
+  font_handles = {}
+}
+
+local APP = APP_2048
 local root = lv_scr_act()
 local MAIN_STYLE = LV_PART_MAIN | LV_STATE_DEFAULT
+local FONT_18 = rawget(_G, "LV_FONT_MONTSERRAT_16") or 16
+
+local function load_font_ref(path, fallback)
+  if lv_font_load then
+    local ok, handle = pcall(function()
+      return lv_font_load(path)
+    end)
+    if ok and type(handle) == "number" and handle > 0 then
+      APP.font_handles[#APP.font_handles + 1] = handle
+      return handle
+    end
+  end
+  return fallback
+end
+
+local function init_fonts()
+  FONT_18 = load_font_ref("/sd/apps/2048/font/tile_18.bin", FONT_18)
+end
+
+local function release_fonts()
+  if lv_font_free then
+    for _, handle in ipairs(APP.font_handles) do
+      pcall(function()
+        lv_font_free(handle)
+      end)
+    end
+  end
+  APP.font_handles = {}
+end
+
+init_fonts()
 
 local screen_w = 320
 local screen_h = 240
@@ -38,19 +81,31 @@ local C = {
   shadow = 0x060404,
   text_main = 0xFFF7EF,
   text_soft = 0xD7C4B1,
+  result_blue = 0x4FA3FF,
   title_accent = 0xF0B247,
   tile_dark = 0x5F5148,
   tile_light = 0xFFF8F0,
 }
 
-local function with_ui_batch(fn)
+-- 用 begin/end 包住对象切换边界，避免删建和动画初始态被半途刷出来。
+local function with_lv_batch(fn)
   if not fn then
     return
   end
 
+  if not lv_begin or not lv_end then
+    return fn()
+  end
+
+  lv_begin()
   local ok, result = xpcall(fn, function(err)
     return tostring(err)
   end)
+
+  local end_ok, end_err = pcall(function() lv_end() end)
+  if not end_ok then
+    error("[2048] lv_end failed: " .. tostring(end_err), 0)
+  end
 
   if not ok then
     error(result, 0)
@@ -156,6 +211,7 @@ local function style_label(id, color, font_size, align, letter_space)
   end
 end
 
+-- 动画统一走 lv_anim_t 模板接口，匹配当前 lua_ui 绑定和 LVGL 官方用法。
 local function anim_del_all(obj)
   if obj and lv_anim_del then
     pcall(function() lv_anim_del(obj, nil) end)
@@ -260,7 +316,7 @@ local function tile_font_size(value)
   if value >= 1024 then
     return 16
   elseif value >= 128 then
-    return 18
+    return FONT_18
   end
   return 20
 end
@@ -280,7 +336,7 @@ local function score_font_size(value)
   elseif digits >= 5 then
     return 16
   elseif digits >= 4 then
-    return 18
+    return FONT_18
   end
   return 20
 end
@@ -333,7 +389,7 @@ local cells = {}
 
 -- 静态棋盘对象只创建一次，后续移动阶段只切换状态和临时动画层。
 local function build_board_ui()
-  lv_obj_clean(lv_scr_act())
+  lv_clear()
 
   bg = lv_obj_create(root)
   lv_obj_set_pos(bg, 0, 0)
@@ -348,7 +404,7 @@ local function build_board_ui()
   info_panel = lv_obj_create(root)
   lv_obj_set_pos(info_panel, side_x, side_y)
   lv_obj_set_size(info_panel, side_w, side_h)
-  style_panel(info_panel, C.panel_bg, 232, 12, C.panel_border, 64, nil, 0, nil, 0, 0)
+  style_panel(info_panel, C.panel_bg, 0, 12, nil, 0, nil, 0, nil, 0, 0)
 
   local title_label = lv_label_create(info_panel)
   lv_label_set_text(title_label, "2048")
@@ -365,7 +421,7 @@ local function build_board_ui()
   lv_label_set_text(score_title, "SCORE")
   lv_obj_set_pos(score_title, 0, 8)
   lv_obj_set_width(score_title, side_w - 18)
-  style_label(score_title, C.text_soft, 10, LV_TEXT_ALIGN_CENTER, 1)
+  style_label(score_title, C.text_soft, 12, LV_TEXT_ALIGN_CENTER, 1)
 
   score_value_label = lv_label_create(score_card)
   lv_label_set_text(score_value_label, "0")
@@ -389,21 +445,21 @@ local function build_board_ui()
 
   local game_over_title = lv_label_create(game_over_card)
   lv_label_set_text(game_over_title, "2048")
-  lv_obj_set_pos(game_over_title, 0, 26)
+  lv_obj_set_pos(game_over_title, 0, 18)
   lv_obj_set_width(game_over_title, over_w)
-  style_label(game_over_title, C.title_accent, 32, LV_TEXT_ALIGN_CENTER)
+  style_label(game_over_title, C.title_accent, 40, LV_TEXT_ALIGN_CENTER)
 
   game_over_score_label = lv_label_create(game_over_card)
   lv_label_set_text(game_over_score_label, "SCORE: 0")
   lv_obj_set_pos(game_over_score_label, 0, 80)
   lv_obj_set_width(game_over_score_label, over_w)
-  style_label(game_over_score_label, C.text_main, 20, LV_TEXT_ALIGN_CENTER)
+  style_label(game_over_score_label, C.result_blue, 20, LV_TEXT_ALIGN_CENTER)
 
   local game_over_hint = lv_label_create(game_over_card)
   lv_label_set_text(game_over_hint, "PRESS HOME TO EXIT")
   lv_obj_set_pos(game_over_hint, 0, 124)
   lv_obj_set_width(game_over_hint, over_w)
-  style_label(game_over_hint, C.text_soft, 10, LV_TEXT_ALIGN_CENTER, 1)
+  style_label(game_over_hint, C.result_blue, 10, LV_TEXT_ALIGN_CENTER, 1)
 
   set_visible(game_over_dim, false)
   set_visible(game_over_card, false)
@@ -430,7 +486,7 @@ local function build_board_ui()
   end
 end
 
-with_ui_batch(build_board_ui)
+with_lv_batch(build_board_ui)
 
 local function render_grid()
   for r = 1, 4 do
@@ -485,6 +541,11 @@ local function free_image_handle(handle)
 
   if lv_snapshot_free then
     pcall(function() lv_snapshot_free(handle) end)
+    return
+  end
+
+  if lv_img_free_handle then
+    pcall(function() lv_img_free_handle(handle) end)
   end
 end
 
@@ -498,10 +559,10 @@ local function release_game_over_snapshot()
 end
 
 local function canvas_frame_begin(id)
-  if not id or not lv_canvas_frame_begin then
+  if not id or not lv_canvas_begin then
     return false
   end
-  local ok = pcall(function() lv_canvas_frame_begin(id) end)
+  local ok = pcall(function() lv_canvas_begin(id) end)
   return ok
 end
 
@@ -510,8 +571,8 @@ local function canvas_frame_end(id)
     return
   end
 
-  if lv_canvas_frame_end then
-    pcall(function() lv_canvas_frame_end(id) end)
+  if lv_canvas_end then
+    pcall(function() lv_canvas_end(id) end)
     return
   end
 
@@ -545,7 +606,7 @@ local function refresh_game_over_blur()
 
   if handle then
     lv_canvas_fill_bg(game_over_blur, C.panel_bg, 255)
-    lv_canvas_draw_img(game_over_blur, -over_x, -over_y, {handle = handle}, {opa = 255})
+    lv_canvas_draw_img(game_over_blur, -over_x, -over_y, { handle = handle }, { opa = 255 })
     lv_canvas_blur_hor(game_over_blur, nil, 7)
     lv_canvas_blur_ver(game_over_blur, nil, 7)
     lv_canvas_draw_rect(game_over_blur, 0, 0, over_w, over_h, 0xF1E0D0, 44)
@@ -807,7 +868,7 @@ local function start_slide_anims(moves, ts_ms)
   local any = false
   local target_counts = collect_target_counts(moves)
 
-  with_ui_batch(function()
+  with_lv_batch(function()
     clear_anim_tiles()
     for i = 1, #moves do
       local m = moves[i]
@@ -862,7 +923,7 @@ local function reset_game()
   local r1, c1 = spawn_random()
   local r2, c2 = spawn_random()
   update_score()
-  with_ui_batch(function()
+  with_lv_batch(function()
     clear_anim_tiles()
     render_grid()
     if r1 then anim_spawn(r1, c1) end
@@ -873,28 +934,16 @@ end
 reset_game()
 
 local long_repeat_state = {}
-local press_state = {}
 
 local function reset_repeat_state(evt_code)
   long_repeat_state[evt_code] = nil
 end
 
-local function reset_press_state(evt_code)
-  press_state[evt_code] = nil
-end
-
 local function should_trigger_press(evt_type, evt_code)
   if evt_type == key.START then
-    press_state[evt_code] = true
     reset_repeat_state(evt_code)
     return true
-  elseif evt_type == key.SHORT then
-    local had_start = press_state[evt_code]
-    reset_press_state(evt_code)
-    reset_repeat_state(evt_code)
-    return not had_start
   elseif evt_type == key.LONG_START then
-    reset_press_state(evt_code)
     long_repeat_state[evt_code] = {count = 0}
     return false
   elseif evt_type == key.LONG_REPEAT then
@@ -905,7 +954,6 @@ local function should_trigger_press(evt_type, evt_code)
       return true
     end
   elseif evt_type == key.LONG_END then
-    reset_press_state(evt_code)
     reset_repeat_state(evt_code)
   end
   return false
@@ -937,7 +985,7 @@ key.on(function(evt_code, evt_type, ts_ms)
     pending_game_over = not has_available_moves()
     update_score()
     if not start_slide_anims(moves, ts_ms) then
-      with_ui_batch(function()
+      with_lv_batch(function()
         render_grid()
         if pending_spawn then
           anim_spawn(pending_spawn.r, pending_spawn.c)
@@ -949,7 +997,7 @@ key.on(function(evt_code, evt_type, ts_ms)
       end)
     end
   elseif not has_available_moves() then
-    with_ui_batch(show_game_over)
+    with_lv_batch(show_game_over)
   end
 end)
 
@@ -958,7 +1006,7 @@ tick_timer:alarm(20, tmr.ALARM_AUTO, function()
   local ts_ms = millis() or 0
   if anim_active and ts_ms >= anim_end_ms then
     anim_active = false
-    with_ui_batch(function()
+    with_lv_batch(function()
       clear_anim_tiles()
       render_grid()
       if pending_spawn then
@@ -971,3 +1019,24 @@ tick_timer:alarm(20, tmr.ALARM_AUTO, function()
     end)
   end
 end)
+
+function APP.stop(reason)
+  if tick_timer then
+    pcall(function() tick_timer:stop() end)
+    pcall(function() tick_timer:unregister() end)
+    tick_timer = nil
+  end
+
+  pcall(function() key.off() end)
+
+  if rawget(_G, "APP_2048") == APP then
+    _G.APP_2048 = nil
+  end
+
+  if lv_clear then
+    pcall(function() lv_clear() end)
+  end
+  release_fonts()
+end
+
+APP.shutdown = APP.stop
