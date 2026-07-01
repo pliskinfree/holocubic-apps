@@ -463,7 +463,7 @@
     local function apply_weather_address(address)
     address = trim(address)
     APP.WEATHER_LOCATION = address
-    if address ~= "" and not address:match("^%d+$") then
+    if address ~= "" and (APP.CITY_NAME == "" or APP.CITY_NAME == "Weather" or not address:match("^%d+$")) then
         APP.CITY_NAME = address
     end
     end
@@ -1356,6 +1356,8 @@
     local startup_screen = nil
     local main_screen = nil
 
+    init_fonts()
+
     if lv_scr_load then
         startup_screen = create_screen()
         main_screen = create_screen()
@@ -1388,7 +1390,6 @@
         call(lv_obj_clear_flag, root, rawget(_G, "LV_OBJ_FLAG_SCROLLABLE"))
     end
 
-    init_fonts()
     refresh_startup_labels()
 
     APP.ui.bg_img = create_img(root, asset_path("bg", "partly"), 0, 0)
@@ -1400,7 +1401,7 @@
     call(lv_obj_set_size, now_page, APP.SCREEN_W, APP.SCREEN_H)
 
     APP.ui.time_label = create_label(now_page, "--:--", FONT_34, C.text, 14, 23, 150, ALIGN_LEFT)
-    APP.ui.city_label = create_label(now_page, APP.CITY_NAME, FONT_16, C.text_soft, 16, 68, 166, ALIGN_LEFT)
+    APP.ui.city_label = create_label(now_page, APP.CITY_NAME, FONT_16, C.text, 16, 68, 166, ALIGN_LEFT)
     APP.ui.cond_label = create_label(now_page, "Waiting", FONT_12, C.text, 16, 90, 132, ALIGN_LEFT)
     APP.ui.date_label = create_label(now_page, "--/--", FONT_12, C.text_soft, 16, 113, 132, ALIGN_LEFT)
 

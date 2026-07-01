@@ -30,7 +30,7 @@ lv_obj_set_style_text_opa(info, 0, MAIN_STYLE)
 lv_obj_set_style_text_font(info, 14, MAIN_STYLE)
 lv_obj_set_align(info, LV_ALIGN_BOTTOM_MID, 0, -8)
 
-local dir = "/sd/videos"
+local dir = "/sd/gifs"
 local play_ms = 10000
 local last_switch = 0
 
