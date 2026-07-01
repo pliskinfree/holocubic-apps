@@ -1,3 +1,4 @@
 name = Ticker
 entry = main.lua
 description = Multi-market quotes and trend charts
+version = 1.0.0

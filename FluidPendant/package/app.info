@@ -2,3 +2,4 @@ name = FluidPendant
 entry = main.lua
 icon = main.png
 description = FLIP-style electronic liquid pendant
+version = 1.0.0

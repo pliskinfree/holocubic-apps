@@ -1,3 +1,4 @@
 name = Nixie Clock
 entry = main.lua
 icon = main.png
+version = 1.0.0
