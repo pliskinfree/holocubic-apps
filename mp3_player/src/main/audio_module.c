@@ -18,12 +18,14 @@
 #define AUDIO_IN_CAP 1024u
 #define AUDIO_PREFETCH_CAP (2u * 1024u * 1024u)
 #define AUDIO_PREFETCH_READ_CHUNK 8192u
+#define AUDIO_PREFETCH_LOW_BYTES (128u * 1024u)
+#define AUDIO_PREFETCH_TARGET_BYTES (256u * 1024u)
 #define AUDIO_OUT_CAP 8192u
 #define AUDIO_OUT_INIT 4608u
 #define AUDIO_DEFAULT_READ 4096u
 #define AUDIO_READ_CAP 8192u
 #define AUDIO_I2S_PENDING_CAP AUDIO_READ_CAP
-#define AUDIO_PCM_RING_CAP (512u * 1024u)
+#define AUDIO_PCM_RING_CAP (256u * 1024u)
 #define AUDIO_PCM_RING_LOW_BYTES (32u * 1024u)
 #define AUDIO_PCM_RING_RESUME_BYTES (128u * 1024u)
 #define AUDIO_PCM_RING_START_BYTES AUDIO_PCM_RING_RESUME_BYTES
@@ -739,6 +741,29 @@ static size_t audio_prefetch_take(audio_instance_t *inst, uint8_t *dst, size_t m
         inst->prefetch_pos = 0;
     }
     return n;
+}
+
+static int audio_prefetch_refill_low_water(audio_instance_t *inst)
+{
+    size_t low = AUDIO_PREFETCH_LOW_BYTES;
+    size_t target = AUDIO_PREFETCH_TARGET_BYTES;
+    size_t max_bytes = AUDIO_PREFETCH_TARGET_BYTES;
+    if (!inst || !inst->prefetch_buf || inst->prefetch_cap == 0 || inst->prefetch_eof) {
+        return 1;
+    }
+    if (low > inst->prefetch_cap) {
+        low = inst->prefetch_cap;
+    }
+    if (target > inst->prefetch_cap) {
+        target = inst->prefetch_cap;
+    }
+    if (target < low) {
+        target = low;
+    }
+    if (inst->prefetch_len >= low) {
+        return 1;
+    }
+    return audio_prefetch_fill(inst, target, max_bytes);
 }
 
 static int audio_build_open_path(audio_instance_t *inst,
@@ -2073,6 +2098,14 @@ static void audio_i2s_producer_task_entry(void *arg)
             }
             continue;
         }
+
+        /* Keep SD reads in a short refill phase; decode below consumes buffered bytes. */
+        if (!audio_prefetch_refill_low_water(inst)) {
+            inst->producer_task_error = 1;
+            inst->play_task_error = 1;
+            break;
+        }
+
         if (!audio_pcm_ring_fill_once(inst, chunk, &produced)) {
             inst->producer_task_error = 1;
             inst->play_task_error = 1;
@@ -2090,13 +2123,6 @@ static void audio_i2s_producer_task_entry(void *arg)
         }
         inst->producer_task_decoded_bytes += (uint32_t)produced;
         inst->producer_task_iterations++;
-        if (!inst->prefetch_eof && inst->prefetch_len < inst->prefetch_cap) {
-            if (!audio_prefetch_fill(inst, inst->prefetch_cap, AUDIO_PREFETCH_READ_CHUNK)) {
-                inst->producer_task_error = 1;
-                inst->play_task_error = 1;
-                break;
-            }
-        }
         if (inst->host.task.yield) {
             inst->host.task.yield();
         }

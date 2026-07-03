@@ -28,15 +28,15 @@ MUSIC_PLAYER_APP = {
   PRODUCER_TASK_PRIORITY = 4,
   PRODUCER_TASK_CORE = 1,
   PLAY_TICK_MS = 25,
-  UI_TICK_MS = 60,
+  UI_TICK_MS = 80,
   PROFILE_AUDIO = false,
   PROFILE_LOG_MS = 2000,
   USE_CANVAS_PROGRESS = false,
   WEB_MUSIC_DIR = "/sd/mp3",
-  MP3_PREFETCH_TARGET_BYTES = 2 * 1024 * 1024,
+  MP3_PREFETCH_TARGET_BYTES = 1 * 1024 * 1024,
   MP3_PREFETCH_READ_BYTES = 16 * 1024,
   MP3_PREFETCH_OPEN_BYTES = 512 * 1024,
-  WEB_CHUNK_SIZE = 256 * 1024,
+  WEB_CHUNK_SIZE = 64 * 1024,
   WEB_MAX_FILE_SIZE = 32 * 1024 * 1024,
   WEB_MAX_HANDLERS = 64,
   WEB_DEBUG = false,
@@ -547,6 +547,24 @@ local function web_music_path(name)
   return APP.WEB_MUSIC_DIR .. "/" .. safe, safe
 end
 
+local function web_upload_temp_path(path)
+  return tostring(path or "") .. ".uploading"
+end
+
+local function web_target_is_active_track(path, name)
+  local track = APP.tracks and APP.tracks[APP.index]
+  if not track then return false end
+  if not (S.playing or S.opening or S.status == "PLAY" or S.status == "PAUSE") then
+    return false
+  end
+  local target_path = tostring(path or "")
+  local target_name = tostring(name or ""):lower()
+  local track_path = tostring(track.path or "")
+  local track_name = tostring(track.name or ""):lower()
+  return (target_path ~= "" and track_path ~= "" and target_path == track_path) or
+    (target_name ~= "" and track_name ~= "" and target_name == track_name)
+end
+
 local function web_ensure_music_dir()
   local st = file and file.stat and file.stat(APP.WEB_MUSIC_DIR)
   if st and st.is_dir then return true end
@@ -590,23 +608,54 @@ local function web_remove(req)
   return web_ok({ name = safe_or_err })
 end
 
-local function web_write_upload_body(req, fd, offset, total)
+local function web_read_upload_body(req, offset, total)
+  local chunks = {}
   local written = 0
   while true do
     local chunk = req.getbody()
     if not chunk then break end
     if #chunk > 0 then
       if offset + written + #chunk > total then
-        return nil, "body exceeds total"
+        return nil, nil, "body exceeds total"
       end
-      if not fd:write(chunk) then
-        return nil, "write failed"
-      end
+      chunks[#chunks + 1] = chunk
       written = written + #chunk
     end
   end
-  fd:flush()
-  return written
+  return chunks, written
+end
+
+local function web_write_upload_chunks(path, chunks, append)
+  local fd = file.open(path, append and "a+" or "w+")
+  if not fd then return false, "open failed" end
+  for _, chunk in ipairs(chunks or {}) do
+    if #chunk > 0 and not fd:write(chunk) then
+      fd:close()
+      return false, "write failed"
+    end
+  end
+  fd:close()
+  return true
+end
+
+local function web_finish_upload(tmp_path, final_path)
+  if not file.rename then
+    return false, "rename missing"
+  end
+  local st = file.stat(final_path)
+  if st and st.is_dir then
+    return false, "target is directory"
+  end
+  if st then
+    file.remove(final_path)
+    if file.stat(final_path) then
+      return false, "replace failed"
+    end
+  end
+  if not file.rename(tmp_path, final_path) then
+    return false, "rename failed"
+  end
+  return true
 end
 
 local function web_upload_log_progress(name, offset, next_offset, total)
@@ -658,30 +707,38 @@ local function web_upload(req)
   local q = web_parse_query(req and req.query)
   local path, safe_or_err = web_music_path(q.name or "")
   if not path then return web_err("400 Bad Request", safe_or_err) end
+  local tmp_path = web_upload_temp_path(path)
   local offset = math.floor(tonumber(q.offset) or 0)
   local total = math.floor(tonumber(q.total) or -1)
   if offset < 0 or total < 0 or offset > total then return web_err("400 Bad Request", "invalid offset") end
   if total > APP.WEB_MAX_FILE_SIZE then return web_err("413 Payload Too Large", "file too large") end
   if not web_ensure_music_dir() then return web_err("500 Internal Server Error", "mkdir failed") end
 
-  local fd
+  if web_target_is_active_track(path, safe_or_err) then
+    return web_err("409 Conflict", "target is active track")
+  end
+
+  local chunks, written, read_err = web_read_upload_body(req, offset, total)
+  if not chunks then return web_err("400 Bad Request", read_err) end
+
   if offset == 0 then
-    fd = file.open(path, "w+")
+    if file.stat(tmp_path) then
+      file.remove(tmp_path)
+    end
   else
-    local st = file.stat(path)
+    local st = file.stat(tmp_path)
     if not st or st.is_dir or (st.size or 0) ~= offset then
       return web_err("409 Conflict", "upload offset mismatch")
     end
-    fd = file.open(path, "a+")
   end
-  if not fd then return web_err("500 Internal Server Error", "open failed") end
 
-  local written, err = web_write_upload_body(req, fd, offset, total)
-  fd:close()
-  if not written then return web_err("400 Bad Request", err) end
+  local ok, write_err = web_write_upload_chunks(tmp_path, chunks, offset > 0)
+  if not ok then return web_err("500 Internal Server Error", write_err) end
   local next_offset = offset + written
   web_upload_log_progress(safe_or_err, offset, next_offset, total)
   if next_offset >= total then
+    local finish_ok, finish_err = web_finish_upload(tmp_path, path)
+    if not finish_ok then return web_err("500 Internal Server Error", finish_err) end
     APP.tracks = scan_tracks()
   end
   return web_ok({ name = safe_or_err, next_offset = next_offset, total = total, done = next_offset >= total })
