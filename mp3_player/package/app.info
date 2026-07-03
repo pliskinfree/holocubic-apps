@@ -1,5 +1,5 @@
 name = Music
 entry = main.lua
 icon = main.png
-description = SD MP3/WAV player
-version = 1.1.0
+description = SD music player
+version = 1.11
