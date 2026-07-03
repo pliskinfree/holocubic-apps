@@ -1,5 +1,9 @@
 set(MODULE_ABI_DIR "" CACHE PATH "Directory containing module_abi.h")
 
+if(NOT MODULE_ABI_DIR AND EXISTS "${CMAKE_CURRENT_LIST_DIR}/../module_abi.h")
+    set(MODULE_ABI_DIR "${CMAKE_CURRENT_LIST_DIR}/..")
+endif()
+
 if(NOT MODULE_ABI_DIR AND DEFINED ENV{CUBICLUA_ROOT} AND EXISTS "$ENV{CUBICLUA_ROOT}/src/dynmod/module_abi.h")
     set(MODULE_ABI_DIR "$ENV{CUBICLUA_ROOT}/src/dynmod")
 endif()

@@ -8,10 +8,11 @@ M.APP_DIR = "/sd/apps/xiaozhi"
 M.XZ_MODULE = M.APP_DIR .. "/xiaozhi.so"
 M.WAKE_MODULE = M.APP_DIR .. "/wake.so"
 M.CONFIG_PATH = M.APP_DIR .. "/config.json"
-M.WAKE_MODEL_DIR = "/sd/srmodels/wn9s_nihaoxiaozhi"
+M.WAKE_MODEL_DIR = M.APP_DIR .. "/wake/wn9s_nihaoxiaozhi"
 M.WAKE_INDEX = M.WAKE_MODEL_DIR .. "/wn9_index"
 M.WAKE_DATA = M.WAKE_MODEL_DIR .. "/wn9_data"
 M.WAKE_WORD = "你好小智"
+M.TIMEZONE = "CST-8"
 M.ASSET_DIR = M.APP_DIR .. "/assets"
 M.EMOJI_GIF_DIR = M.ASSET_DIR .. "/emojis/gif"
 M.EMOJI_PNG_DIR = M.ASSET_DIR .. "/emojis/png"
@@ -185,6 +186,9 @@ function M.load()
     if type(obj.wake_word) == "string" and obj.wake_word ~= "" then
       M.WAKE_WORD = obj.wake_word
     end
+    if type(obj.timezone) == "string" and obj.timezone ~= "" then
+      M.TIMEZONE = obj.timezone
+    end
     return M
   end
 
@@ -194,6 +198,7 @@ function M.load()
   local token = pick_string(ws_block, "token")
   local version = pick_number(ws_block, "version")
   local wake_word = pick_string(raw, "wake_word")
+  local timezone = pick_string(raw, "timezone")
 
   if url and url:match("^wss?://") then
     M.websocket.url = url
@@ -206,6 +211,9 @@ function M.load()
   end
   if wake_word and wake_word ~= "" then
     M.WAKE_WORD = wake_word
+  end
+  if timezone and timezone ~= "" then
+    M.TIMEZONE = timezone
   end
   if ota_block ~= "" then
     local ota_url = pick_string(ota_block, "url")

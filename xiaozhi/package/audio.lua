@@ -436,7 +436,7 @@ function M.new(cfg)
     if not file_exists(cfg.WAKE_INDEX) or not file_exists(cfg.WAKE_DATA) then
       self.wake_missing = true
       set_error("wake model missing")
-      print("[xiaozhi] missing", cfg.WAKE_INDEX)
+      print("[xiaozhi] missing wake model", cfg.WAKE_INDEX, cfg.WAKE_DATA)
       return false
     end
     if not self.wake and not self:load_modules() then

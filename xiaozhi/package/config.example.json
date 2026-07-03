@@ -11,5 +11,6 @@
     "token": "",
     "version": 3
   },
-  "wake_word": "你好小智"
+  "wake_word": "你好小智",
+  "timezone": "CST-8"
 }

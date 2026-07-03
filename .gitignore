@@ -1,2 +1,19 @@
 info页面要求.md
 .agents
+
+# xiaozhi build outputs
+/xiaozhi/src/build/
+/xiaozhi/src/wake/build/
+/xiaozhi/src/managed_components/
+/xiaozhi/src/wake/managed_components/
+/xiaozhi/src/**/CMakeFiles/
+/xiaozhi/src/**/CMakeCache.txt
+/xiaozhi/src/**/cmake_install.cmake
+/xiaozhi/src/**/build.ninja
+/xiaozhi/src/**/.ninja_deps
+/xiaozhi/src/**/.ninja_log
+/xiaozhi/src/**/project_description.json
+/xiaozhi/src/**/compile_commands.json
+/xiaozhi/src/**/config/
+/xiaozhi/src/**/.pio/
+/xiaozhi/src/**/sdkconfig.old

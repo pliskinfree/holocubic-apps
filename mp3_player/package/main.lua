@@ -19,38 +19,28 @@ MUSIC_PLAYER_APP = {
   DATA_OUT_PIN = 48,
   BUFFER_COUNT = 12,
   BUFFER_LEN = 1024,
-  READ_BYTES = 2048,
-  PLAY_MAX_BYTES = 8192,
-  I2S_WRITE_TIMEOUT_MS = 8,
   PLAY_TASK_CHUNK_BYTES = 4096,
   PLAY_TASK_TIMEOUT_MS = 80,
   PLAY_TASK_STACK_BYTES = 12288,
-  PLAY_TASK_PRIORITY = 8,
+  PLAY_TASK_PRIORITY = 12,
   PLAY_TASK_CORE = 1,
-  VIPER_PCM_BUFFER_ENABLED = true,
-  VIPER_PCM_BUFFER_BYTES = 131072,
-  VIPER_PCM_TARGET_BYTES = 98304,
-  VIPER_PCM_PREFILL_BYTES = 98304,
-  VIPER_PCM_READS_PER_TICK = 1,
-  VIPER_PCM_PREFILL_READS = 48,
-  VIPER_PCM_BUFFERING_READS = 8,
-  AUDIO_BUFFER_LOW_BYTES = 16384,
-  AUDIO_BUFFER_RESUME_BYTES = 65536,
-  AUDIO_BUFFER_PAUSE_MS = 500,
+  PRODUCER_TASK_STACK_BYTES = 12288,
+  PRODUCER_TASK_PRIORITY = 7,
+  PRODUCER_TASK_CORE = 0,
   PLAY_TICK_MS = 23,
   UI_TICK_MS = 55,
-  PROFILE_AUDIO = true,
+  PROFILE_AUDIO = false,
   PROFILE_LOG_MS = 2000,
   USE_CANVAS_PROGRESS = false,
   WEB_MUSIC_DIR = "/sd/mp3",
   MP3_PREFETCH_TARGET_BYTES = 2 * 1024 * 1024,
   MP3_PREFETCH_READ_BYTES = 16 * 1024,
   MP3_PREFETCH_OPEN_BYTES = 512 * 1024,
-  MP3_PREFETCH_BUFFERING_READ_BYTES = 64 * 1024,
-  WEB_CHUNK_SIZE = 8 * 1024,
+  WEB_CHUNK_SIZE = 256 * 1024,
   WEB_MAX_FILE_SIZE = 32 * 1024 * 1024,
   WEB_MAX_HANDLERS = 64,
-  WEB_DEBUG = true,
+  WEB_DEBUG = false,
+  FUNCTION_LOG = true,
   EQ_SETTINGS_FILE = "eq_settings.json",
   EQ_SAVE_DELAY_MS = 1000,
   MP3_FALLBACK_BITRATE = 128000,
@@ -78,8 +68,11 @@ local C = {
 }
 
 local LYRIC_OFFSETS = { -2, -1, 0, 1, 2, 3 }
-local LYRIC_GAP = 24
 local LYRIC_CENTER_Y = 54
+local LYRIC_WRAP_LIMIT = 15
+local LYRIC_LINE_SPACE = 4
+local LYRIC_SMALL_LINE_H = 17
+local LYRIC_ACTIVE_LINE_H = 21
 
 APP.C = C
 APP.MAIN_STYLE = MAIN_STYLE
@@ -93,8 +86,11 @@ APP.EVENT_CLICKED = EVENT_CLICKED
 APP.FLAG_CLICKABLE = FLAG_CLICKABLE
 APP.LV_LAYOUT_NONE_VALUE = LV_LAYOUT_NONE_VALUE
 APP.LYRIC_OFFSETS = LYRIC_OFFSETS
-APP.LYRIC_GAP = LYRIC_GAP
 APP.LYRIC_CENTER_Y = LYRIC_CENTER_Y
+APP.LYRIC_WRAP_LIMIT = LYRIC_WRAP_LIMIT
+APP.LYRIC_LINE_SPACE = LYRIC_LINE_SPACE
+APP.LYRIC_SMALL_LINE_H = LYRIC_SMALL_LINE_H
+APP.LYRIC_ACTIVE_LINE_H = LYRIC_ACTIVE_LINE_H
 
 APP.running = true
 APP.audio = nil
@@ -103,34 +99,35 @@ APP.ui = {}
 APP.font_handles = {}
 APP.tracks = {}
 APP.index = 1
-APP.viper_pcm = nil
 APP.prof = nil
 APP.web_started = false
+APP.upload_logs = {}
+
 
 APP.eq_settings = {
-  volume = 0.5,
-  hpf_freq = 120,
+  volume = 0.4,
+  hpf_freq = 100,
   limiter_dbfs = nil,
   limiter_peak = 31000,
   vbass = true,
   vbass_low_hpf = 50,
   vbass_low_lpf = 180,
-  vbass_out_hpf = 180,
+  vbass_out_hpf = 100,
   vbass_out_lpf = 600,
   vbass_drive = 3.5,
   vbass_mix = 0.25,
   vbass_even = 1.9,
   vbass_odd = 0.5,
   vbass_solo = false,
-  eq = {6.0, 5.5, 3.5, 0.3, -2.2, -0.6, 0.8},
+  eq = {6.0, 5.9, 3.6, 0.3, -2.6, -0.8, 0.5},
 }
+
 
 APP.state = {
   playing = false,
   opening = false,
   in_tick = false,
   buffering = false,
-  buffering_until_ms = 0,
   buffering_reason = "",
   sample_rate = 44100,
   channels = 2,
@@ -138,8 +135,6 @@ APP.state = {
   file_size = 0,
   bitrate = 0,
   duration_estimated = false,
-  i2s_last_feed_ms = 0,
-  i2s_credit_bytes = 0,
   pcm_bytes = 0,
   play_task_base_pcm_bytes = 0,
   play_task_last_written_bytes = 0,
@@ -176,6 +171,43 @@ local function web_log(...)
   if APP.WEB_DEBUG then
     log("[web]", ...)
   end
+end
+
+local function feature_log(...)
+  if APP.FUNCTION_LOG then
+    log(...)
+  end
+end
+
+local function log_now_ms()
+  if millis then
+    local ok, value = pcall(millis)
+    if ok and value then return tonumber(value) or 0 end
+  end
+  return math.floor((os and os.time and os.time() or 0) * 1000)
+end
+
+local function log_bytes(n)
+  n = tonumber(n) or 0
+  if n >= 1024 * 1024 then
+    return string.format("%.1f MB", n / (1024 * 1024))
+  end
+  if n >= 1024 then
+    return string.format("%.1f KB", n / 1024)
+  end
+  return tostring(math.floor(n)) .. " B"
+end
+
+local function log_rate(bytes, elapsed_ms)
+  elapsed_ms = math.max(1, tonumber(elapsed_ms) or 1)
+  local per_sec = (tonumber(bytes) or 0) * 1000 / elapsed_ms
+  if per_sec >= 1024 * 1024 then
+    return string.format("%.2f MB/s", per_sec / (1024 * 1024))
+  end
+  if per_sec >= 1024 then
+    return string.format("%.1f KB/s", per_sec / 1024)
+  end
+  return string.format("%.0f B/s", per_sec)
 end
 
 local function text_or(v, fallback)
@@ -577,6 +609,51 @@ local function web_write_upload_body(req, fd, offset, total)
   return written
 end
 
+local function web_upload_log_progress(name, offset, next_offset, total)
+  name = tostring(name or "")
+  total = tonumber(total) or 0
+  offset = tonumber(offset) or 0
+  next_offset = tonumber(next_offset) or offset
+  local key = name ~= "" and name or "upload"
+  local state = APP.upload_logs[key]
+  local now = log_now_ms()
+
+  if offset == 0 or not state then
+    state = {
+      start_ms = now,
+      next_pct = 10,
+      total = total,
+    }
+    APP.upload_logs[key] = state
+    feature_log("Upload started:", name, "(" .. log_bytes(total) .. ")")
+  end
+
+  if total <= 0 then
+    feature_log("Upload complete:", name, "0 B in 0.0s, avg 0 B/s")
+    APP.upload_logs[key] = nil
+    return
+  end
+
+  local pct = math.floor(next_offset * 100 / total)
+  local next_pct = tonumber(state.next_pct) or 10
+  while pct >= next_pct and next_pct < 100 do
+    feature_log("Upload progress:", name, tostring(next_pct) .. "%")
+    next_pct = next_pct + 10
+  end
+  state.next_pct = next_pct
+
+  if next_offset >= total then
+    local elapsed = math.max(1, now - (tonumber(state.start_ms) or now))
+    feature_log(
+      "Upload complete:",
+      name,
+      log_bytes(total) .. " in " .. string.format("%.1fs", elapsed / 1000),
+      "avg " .. log_rate(total, elapsed)
+    )
+    APP.upload_logs[key] = nil
+  end
+end
+
 local function web_upload(req)
   local q = web_parse_query(req and req.query)
   local path, safe_or_err = web_music_path(q.name or "")
@@ -603,6 +680,7 @@ local function web_upload(req)
   fd:close()
   if not written then return web_err("400 Bad Request", err) end
   local next_offset = offset + written
+  web_upload_log_progress(safe_or_err, offset, next_offset, total)
   if next_offset >= total then
     APP.tracks = scan_tracks()
   end
@@ -928,12 +1006,19 @@ local function log_audio_stats()
       module_prof_fmt(st, "pushlua", "push"),
       module_prof_fmt(st, "alloc", "alloc"),
       "prefetch=" .. tostring(st.prefetch_bytes or 0) .. "/" .. tostring(st.prefetch_buffer_bytes or 0),
+      "pcmb=" .. tostring(st.pcm_buffer_bytes or 0) .. "/" .. tostring(st.pcm_buffer_capacity or 0),
       "i2sp=" .. tostring(st.i2s_pending_bytes or 0),
       "short=" .. tostring(st.i2s_short_writes or 0),
       "task=" .. tostring(st.i2s_task_running or 0) ..
         "/" .. tostring(st.i2s_task_eof or 0) ..
         "/" .. tostring(st.i2s_task_error or 0) ..
-        "," .. tostring(math.floor((tonumber(st.i2s_task_written_bytes) or 0) / 1024)) .. "KB"
+        "/" .. tostring(st.i2s_task_buffering or 0) ..
+        "/" .. tostring(st.i2s_task_paused or 0) ..
+        "," .. tostring(math.floor((tonumber(st.i2s_task_written_bytes) or 0) / 1024)) .. "KB",
+      "prod=" .. tostring(st.i2s_producer_running or 0) ..
+        "/" .. tostring(st.i2s_producer_eof or 0) ..
+        "/" .. tostring(st.i2s_producer_error or 0) ..
+        "," .. tostring(math.floor((tonumber(st.i2s_producer_decoded_bytes) or 0) / 1024)) .. "KB"
     )
   end
   reset_audio_stats()
@@ -948,22 +1033,13 @@ local function maybe_log_profile()
     return
   end
 
-  local ctx = APP.viper_pcm
-  local buf_text = "buf=off"
-  if ctx and ctx.enabled then
-    buf_text = "buf=" .. tostring(ctx.bytes or 0) .. "/" .. tostring(ctx.size or 0)
-  end
-
   log(
     "lua.prof",
     prof_fmt("tick", APP.prof.play_tick),
     prof_fmt("read", APP.prof.audio_read),
     prof_fmt("fill", APP.prof.buffer_fill),
-    prof_fmt("vpop", APP.prof.viper_pop),
-    prof_fmt("vpush", APP.prof.viper_push),
     prof_fmt("i2s", APP.prof.i2s_write),
-    prof_fmt("ui", APP.prof.ui),
-    buf_text
+    prof_fmt("ui", APP.prof.ui)
   )
   log_audio_stats()
   reset_profile()
@@ -1061,52 +1137,6 @@ local function resume_play_clock()
   S.clock_start_ms = now_ms()
 end
 
-local function audio_frame_bytes()
-  local channels = math.floor(tonumber(S.channels) or 1)
-  if channels < 1 then channels = 1 end
-  if channels > 2 then channels = 2 end
-  return channels * 2
-end
-
-local function reset_i2s_feed_clock()
-  S.i2s_last_feed_ms = now_ms()
-  S.i2s_credit_bytes = 0
-end
-
-local function i2s_due_bytes()
-  local now = now_ms()
-  local last = tonumber(S.i2s_last_feed_ms) or 0
-  local frame = audio_frame_bytes()
-  local bps = tonumber(S.bytes_per_sec) or ((tonumber(S.sample_rate) or 44100) * frame)
-  local elapsed
-  local raw
-  local want
-  local max_bytes
-
-  if last <= 0 then
-    last = now - APP.PLAY_TICK_MS
-  end
-  elapsed = now - last
-  if elapsed < 1 then
-    return 0
-  end
-  if elapsed > 120 then
-    elapsed = 120
-  end
-
-  raw = (tonumber(S.i2s_credit_bytes) or 0) + elapsed * bps / 1000
-  want = math.floor(raw / frame) * frame
-  max_bytes = math.floor((tonumber(APP.PLAY_MAX_BYTES) or (APP.READ_BYTES * 4)) / frame) * frame
-  if want > max_bytes then
-    want = max_bytes
-    S.i2s_credit_bytes = 0
-  else
-    S.i2s_credit_bytes = raw - want
-  end
-  S.i2s_last_feed_ms = now
-  return want
-end
-
 local function sd_to_lv(path)
   if type(path) == "string" and path:sub(1, 4) == "/sd/" then
     return "S:/" .. path:sub(5)
@@ -1122,150 +1152,6 @@ local function stop_timer(timer)
   if not timer then return end
   pcall(function() timer:stop() end)
   pcall(function() timer:unregister() end)
-end
-
-local function disable_viper_pcm(reason)
-  if APP.viper_pcm and APP.viper_pcm.enabled and reason then
-    log("viper pcm disabled:", reason)
-  end
-  APP.viper_pcm = { enabled = false, reason = reason or "disabled" }
-end
-
-local function init_viper_pcm()
-  if not APP.VIPER_PCM_BUFFER_ENABLED then
-    disable_viper_pcm("config")
-    return false
-  end
-
-  local mod = rawget(_G, "viper")
-  if not mod or not mod.buf then
-    disable_viper_pcm("missing viper")
-    return false
-  end
-
-  local ok, ctx_or_err = pcall(function()
-    local buf = mod.buf(APP.VIPER_PCM_BUFFER_BYTES)
-    if not buf or not buf.from_string or not buf.to_string then
-      error("missing from_string/to_string")
-    end
-    return {
-      enabled = true,
-      buf = buf,
-      size = APP.VIPER_PCM_BUFFER_BYTES,
-      read_pos = 0,
-      write_pos = 0,
-      bytes = 0,
-      eof = false,
-    }
-  end)
-
-  if not ok or not ctx_or_err then
-    disable_viper_pcm(tostring(ctx_or_err or "init failed"))
-    return false
-  end
-
-  APP.viper_pcm = ctx_or_err
-  log("viper pcm enabled", tostring(APP.VIPER_PCM_BUFFER_BYTES))
-  return true
-end
-
-local function reset_viper_pcm()
-  local ctx = APP.viper_pcm
-  if ctx and ctx.enabled then
-    ctx.read_pos = 0
-    ctx.write_pos = 0
-    ctx.bytes = 0
-    ctx.eof = false
-  end
-end
-
-local function viper_pcm_free(ctx)
-  return (ctx.size or 0) - (ctx.bytes or 0)
-end
-
-local function viper_buf_write_string(buf, dst_offset, data, src_offset, len)
-  dst_offset = tonumber(dst_offset) or 0
-  src_offset = tonumber(src_offset) or 0
-  len = tonumber(len) or 0
-  for i = 0, len - 1 do
-    buf:set8(dst_offset + i, data:byte(src_offset + i + 1) or 0)
-  end
-end
-
-local function viper_buf_read_string(buf, offset, len)
-  offset = tonumber(offset) or 0
-  len = tonumber(len) or 0
-  local out = {}
-  for i = 0, len - 1 do
-    out[#out + 1] = string.char(buf:get8(offset + i) & 255)
-  end
-  return table.concat(out)
-end
-
-local function viper_pcm_push(ctx, data)
-  local len = type(data) == "string" and #data or 0
-  if len <= 0 then return true end
-  if len > viper_pcm_free(ctx) then return false end
-
-  local first = math.min(len, ctx.size - ctx.write_pos)
-  viper_buf_write_string(ctx.buf, ctx.write_pos, data, 0, first)
-  if len > first then
-    viper_buf_write_string(ctx.buf, 0, data, first, len - first)
-  end
-  ctx.write_pos = (ctx.write_pos + len) % ctx.size
-  ctx.bytes = ctx.bytes + len
-  return true
-end
-
-local function viper_pcm_pop(ctx, max_bytes)
-  local len = math.min(tonumber(max_bytes) or APP.READ_BYTES, ctx.bytes or 0)
-  if len <= 0 then return "" end
-
-  local first = math.min(len, ctx.size - ctx.read_pos)
-  local out = viper_buf_read_string(ctx.buf, ctx.read_pos, first)
-  if len > first then
-    out = out .. viper_buf_read_string(ctx.buf, 0, len - first)
-  end
-  ctx.read_pos = (ctx.read_pos + len) % ctx.size
-  ctx.bytes = ctx.bytes - len
-  return out
-end
-
-local function fill_viper_pcm(target_bytes, max_reads)
-  local ctx = APP.viper_pcm
-  if not ctx or not ctx.enabled or ctx.eof or not APP.audio then return false end
-
-  local fill_start = APP.PROFILE_AUDIO and profile_now_us() or 0
-  local target = math.min(tonumber(target_bytes) or APP.VIPER_PCM_TARGET_BYTES, ctx.size - APP.READ_BYTES)
-  local reads = 0
-  local limit = tonumber(max_reads) or APP.VIPER_PCM_READS_PER_TICK
-  while (ctx.bytes or 0) < target and viper_pcm_free(ctx) >= APP.READ_BYTES and reads < limit do
-    local read_start = APP.PROFILE_AUDIO and profile_now_us() or 0
-    local pcm, read_err = APP.audio.read(APP.READ_BYTES)
-    if APP.PROFILE_AUDIO then
-      prof_add("audio_read", profile_elapsed_us(read_start), pcm and #pcm or 0)
-    end
-    if not pcm then
-      error("audio.read failed: " .. tostring(read_err))
-    end
-    if #pcm == 0 then
-      ctx.eof = true
-      break
-    end
-    local push_start = APP.PROFILE_AUDIO and profile_now_us() or 0
-    local pushed = viper_pcm_push(ctx, pcm)
-    if APP.PROFILE_AUDIO then
-      prof_add("viper_push", profile_elapsed_us(push_start), #pcm)
-    end
-    if not pushed then
-      break
-    end
-    reads = reads + 1
-  end
-  if APP.PROFILE_AUDIO then
-    prof_add("buffer_fill", profile_elapsed_us(fill_start), 0)
-  end
-  return true
 end
 
 local function is_audio_name(name)
@@ -1286,9 +1172,22 @@ local function entry_path(dir, entry)
   return dir .. "/" .. tostring(entry and entry.name or "")
 end
 
+local function log_scan_result(tracks)
+  tracks = tracks or {}
+  local names = {}
+  local max_names = 12
+  for i = 1, math.min(#tracks, max_names) do
+    names[#names + 1] = tostring(tracks[i].name or tracks[i].title or "")
+  end
+  local suffix = #tracks > max_names and (" ... +" .. tostring(#tracks - max_names) .. " more") or ""
+  local list = #names > 0 and table.concat(names, ", ") or "none"
+  feature_log("Scan found " .. tostring(#tracks) .. " tracks:", list .. suffix)
+end
+
 scan_tracks = function()
   local found = {}
   if not file or not file.listdir then
+    feature_log("Scan skipped: file.listdir unavailable")
     return found
   end
 
@@ -1314,6 +1213,7 @@ scan_tracks = function()
   table.sort(found, function(a, b)
     return tostring(a.name):lower() < tostring(b.name):lower()
   end)
+  log_scan_result(found)
   return found
 end
 
@@ -1349,6 +1249,97 @@ local function parse_time_tag(mm, ss, frac)
   return ms
 end
 
+local function lyric_utf8_chars(text)
+  local chars = {}
+  local s = text_or(text, "")
+  local i = 1
+  local len = #s
+  while i <= len do
+    local b = s:byte(i) or 0
+    local n = 1
+    if b >= 0xF0 then
+      n = 4
+    elseif b >= 0xE0 then
+      n = 3
+    elseif b >= 0xC0 then
+      n = 2
+    end
+    if i + n - 1 > len then n = 1 end
+    chars[#chars + 1] = s:sub(i, i + n - 1)
+    i = i + n
+  end
+  return chars
+end
+
+local function lyric_chars_join(chars, first, last)
+  local out = {}
+  first = math.max(1, first or 1)
+  last = math.min(#chars, last or #chars)
+  for i = first, last do
+    out[#out + 1] = chars[i]
+  end
+  return table.concat(out):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function lyric_target_split(total, limit)
+  if total <= 0 then return 0 end
+  local min_first = math.floor(limit * 2 / 3)
+  local split
+  if total <= math.floor(limit * 4 / 3) then
+    split = math.floor(total * 0.62 + 0.5)
+  else
+    split = math.floor((total + 1) / 2)
+  end
+  split = math.max(min_first, split)
+  split = math.max(total - limit, split)
+  split = math.min(limit, split)
+  return split
+end
+
+local function wrap_lyric_text(text)
+  local limit = tonumber(APP.LYRIC_WRAP_LIMIT) or 15
+  local chars = lyric_utf8_chars(text)
+  local total = #chars
+  if total <= limit then
+    return text_or(text, "")
+  end
+
+  total = math.min(total, limit * 2)
+  local target = lyric_target_split(total, limit)
+  local best
+  local best_score
+  for i = 2, total - 1 do
+    local ch = chars[i]
+    if ch == " " or ch == "\t" then
+      local left = i - 1
+      local right = total - i
+      if left > 0 and right > 0 and left <= limit and right <= limit then
+        local score = math.abs(left - target)
+        if not best_score or score < best_score then
+          best = i
+          best_score = score
+        end
+      end
+    end
+  end
+
+  if best then
+    local first = lyric_chars_join(chars, 1, best - 1)
+    local second = lyric_chars_join(chars, best + 1, total)
+    if first ~= "" and second ~= "" then
+      return first .. "\n" .. second
+    end
+  end
+
+  local split = lyric_target_split(total, limit)
+  local first = lyric_chars_join(chars, 1, split)
+  local second = lyric_chars_join(chars, split + 1, total)
+  if first == "" or second == "" then
+    return lyric_chars_join(chars, 1, total)
+  end
+  return first .. "\n" .. second
+end
+
 local function load_lyrics(track)
   S.lyrics = {}
   S.lyric_idx = 1
@@ -1364,7 +1355,7 @@ local function load_lyrics(track)
       if clean ~= "" then
         S.lyrics[#S.lyrics + 1] = {
           ms = parse_time_tag(mm, ss, frac),
-          text = clean,
+          text = wrap_lyric_text(clean),
         }
       end
     end
@@ -1390,7 +1381,7 @@ local function lyric_text_at(ms)
   return cur, next_line
 end
 
-local function lyric_scroll_px(ms)
+local function lyric_scroll_px(ms, distance)
   local lines = S.lyrics
   if not lines or #lines == 0 then return 0 end
   local cur = lines[S.lyric_idx]
@@ -1399,7 +1390,8 @@ local function lyric_scroll_px(ms)
   local cur_ms = tonumber(cur.ms) or 0
   local next_ms = tonumber(next_line.ms) or cur_ms
   if next_ms <= cur_ms then return 0 end
-  return math.floor(clamp((ms - cur_ms) / (next_ms - cur_ms), 0, 1) * LYRIC_GAP)
+  local px = tonumber(distance) or (LYRIC_ACTIVE_LINE_H + LYRIC_LINE_SPACE)
+  return math.floor(clamp((ms - cur_ms) / (next_ms - cur_ms), 0, 1) * px)
 end
 
 local function start_i2s(rate, channels)
@@ -1455,6 +1447,9 @@ local function start_native_i2s_play()
     stack_bytes = APP.PLAY_TASK_STACK_BYTES,
     priority = APP.PLAY_TASK_PRIORITY,
     core = APP.PLAY_TASK_CORE,
+    producer_stack_bytes = APP.PRODUCER_TASK_STACK_BYTES,
+    producer_priority = APP.PRODUCER_TASK_PRIORITY,
+    producer_core = APP.PRODUCER_TASK_CORE,
   })
   if not ok then
     error("audio.i2s_play_start failed: " .. tostring(started_or_err))
@@ -1463,6 +1458,13 @@ local function start_native_i2s_play()
     error("audio.i2s_play_start failed: " .. tostring(start_err or "start rejected"))
   end
   return true
+end
+
+local function pause_native_i2s(paused)
+  if APP.audio and APP.audio.i2s_play_pause then
+    return pcall(APP.audio.i2s_play_pause, paused and true or false)
+  end
+  return false
 end
 
 local function stop_i2s()
@@ -1479,53 +1481,31 @@ local function stop_i2s()
   end
 end
 
-local function enter_audio_buffering(reason)
-  if not APP.viper_pcm or not APP.viper_pcm.enabled then return end
-  if not S.buffering then
-    log("audio buffering:", tostring(reason or "low pcm"))
+local function sync_native_buffering(st)
+  local buffering = type(st) == "table" and tonumber(st.buffering) == 1
+  if buffering and not S.buffering then
+    pause_play_clock()
+    S.buffering = true
+    S.buffering_reason = "pcm"
+    S.status = "BUFFER"
+    log("audio buffering:", tostring(st.pcm_buffer_bytes or 0) .. "/" .. tostring(st.pcm_buffer_capacity or 0))
+  elseif (not buffering) and S.buffering then
+    S.buffering = false
+    S.buffering_reason = ""
+    if S.playing then
+      S.status = "PLAY"
+      resume_play_clock()
+    end
   end
-  pause_play_clock()
-  S.buffering = true
-  S.buffering_reason = tostring(reason or "low pcm")
-  S.buffering_until_ms = now_ms() + APP.AUDIO_BUFFER_PAUSE_MS
-  S.status = "BUFFER"
-  stop_i2s()
-end
-
-local function leave_audio_buffering()
-  if not S.buffering then return end
-  start_i2s(S.sample_rate, S.channels)
-  S.buffering = false
-  S.buffering_reason = ""
-  S.buffering_until_ms = 0
-  S.status = "PLAY"
-  resume_play_clock()
-end
-
-local function service_audio_buffering(ctx)
-  if not ctx or not ctx.enabled then return true end
-  prefetch_audio(APP.MP3_PREFETCH_TARGET_BYTES, APP.MP3_PREFETCH_BUFFERING_READ_BYTES)
-  fill_viper_pcm(APP.VIPER_PCM_TARGET_BYTES, APP.VIPER_PCM_BUFFERING_READS)
-  prefetch_audio(APP.MP3_PREFETCH_TARGET_BYTES, APP.MP3_PREFETCH_BUFFERING_READ_BYTES)
-  local enough = ctx.eof or ((ctx.bytes or 0) >= APP.AUDIO_BUFFER_RESUME_BYTES)
-  if enough and now_ms() >= (tonumber(S.buffering_until_ms) or 0) then
-    leave_audio_buffering()
-    return true
-  end
-  return false
 end
 
 local function close_audio()
   S.buffering = false
-  S.buffering_until_ms = 0
   S.buffering_reason = ""
-  S.i2s_last_feed_ms = 0
-  S.i2s_credit_bytes = 0
   stop_i2s()
   if APP.audio and APP.audio.close then
     pcall(APP.audio.close)
   end
-  reset_viper_pcm()
 end
 
 apply_audio_effects = function()
@@ -1714,14 +1694,12 @@ local function open_track(index, autoplay)
     S.lyric_idx = 1
     S.error = ""
     S.buffering = false
-    S.buffering_until_ms = 0
     S.buffering_reason = ""
     S.status = autoplay and "PLAY" or "PAUSE"
     load_lyrics(track)
     prefetch_audio(APP.MP3_PREFETCH_TARGET_BYTES, APP.MP3_PREFETCH_OPEN_BYTES)
     start_i2s(S.sample_rate, S.channels)
     reset_play_clock()
-    reset_i2s_feed_clock()
     reset_audio_stats()
     reset_profile()
     S.playing = autoplay and true or false
@@ -1729,6 +1707,11 @@ local function open_track(index, autoplay)
       start_native_i2s_play()
     end
     refresh_track_audio_info()
+    if S.playing then
+      feature_log("Now playing:", tostring(track.title or track.name or "unknown"), "(" .. tostring(APP.index) .. "/" .. tostring(n) .. ")")
+    else
+      feature_log("Track ready:", tostring(track.title or track.name or "unknown"), "(" .. tostring(APP.index) .. "/" .. tostring(n) .. ")")
+    end
   end)
 
   if not ok then
@@ -1744,28 +1727,42 @@ local function pause_track()
   pause_play_clock()
   S.playing = false
   S.buffering = false
-  S.buffering_until_ms = 0
   S.buffering_reason = ""
-  S.i2s_last_feed_ms = 0
-  S.i2s_credit_bytes = 0
   S.status = "PAUSE"
-  stop_i2s()
+  if not pause_native_i2s(true) then
+    stop_i2s()
+  end
+  feature_log("Playback paused:", tostring(current_track() and (current_track().title or current_track().name) or "unknown"))
 end
 
 local function resume_track()
   if S.playing or not current_track() then return end
-  local ok, err = pcall(function()
-    start_i2s(S.sample_rate, S.channels)
-  end)
-  if not ok then
-    set_error(err)
-    return
+  local resumed_native = false
+  if APP.audio and APP.audio.i2s_play_state then
+    local ok_state, st = pcall(APP.audio.i2s_play_state)
+    if ok_state and st and tonumber(st.running) == 1 then
+      local ok_pause, pause_err = pause_native_i2s(false)
+      if not ok_pause then
+        set_error(pause_err)
+        return
+      end
+      resumed_native = true
+    end
   end
-  start_native_i2s_play()
+  if not resumed_native then
+    local ok, err = pcall(function()
+      start_i2s(S.sample_rate, S.channels)
+    end)
+    if not ok then
+      set_error(err)
+      return
+    end
+    start_native_i2s_play()
+  end
   resume_play_clock()
-  reset_i2s_feed_clock()
   S.playing = true
   S.status = "PLAY"
+  feature_log("Playback resumed:", tostring(current_track() and (current_track().title or current_track().name) or "unknown"))
 end
 
 local function toggle_play()
@@ -1779,6 +1776,11 @@ end
 
 local function next_track(delta)
   if #APP.tracks == 0 then return end
+  if (tonumber(delta) or 1) < 0 then
+    feature_log("Previous track requested")
+  else
+    feature_log("Next track requested")
+  end
   open_track(APP.index + (delta or 1), true)
 end
 
@@ -1811,6 +1813,7 @@ local function play_tick()
     if not st then
       error("audio.i2s_play_state failed: " .. tostring(state_err))
     end
+    sync_native_buffering(st)
     local written = tonumber(st.written_bytes) or tonumber(S.play_task_last_written_bytes) or 0
     S.play_task_last_written_bytes = written
     S.pcm_bytes = (tonumber(S.play_task_base_pcm_bytes) or 0) + written

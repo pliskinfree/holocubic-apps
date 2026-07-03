@@ -260,21 +260,346 @@ local function find_asset(candidates)
   return nil
 end
 
-local function now_clock()
+local function trim(text)
+  return tostring(text or ""):match("^%s*(.-)%s*$") or ""
+end
+
+local function is_digit_char(ch)
+  return ch and ch:match("%d") ~= nil
+end
+
+local function parse_posix_offset(text, index)
+  text = tostring(text or "")
+  local i = index or 1
+  local sign = 1
+  local ch = text:sub(i, i)
+  if ch == "+" then
+    i = i + 1
+  elseif ch == "-" then
+    sign = -1
+    i = i + 1
+  end
+
+  local start_i = i
+  while is_digit_char(text:sub(i, i)) do
+    i = i + 1
+  end
+  if i == start_i then
+    return nil, index
+  end
+
+  local hours = tonumber(text:sub(start_i, i - 1)) or 0
+  local minutes = 0
+  local seconds = 0
+  if text:sub(i, i) == ":" then
+    i = i + 1
+    start_i = i
+    while is_digit_char(text:sub(i, i)) do
+      i = i + 1
+    end
+    minutes = tonumber(text:sub(start_i, i - 1)) or 0
+    if text:sub(i, i) == ":" then
+      i = i + 1
+      start_i = i
+      while is_digit_char(text:sub(i, i)) do
+        i = i + 1
+      end
+      seconds = tonumber(text:sub(start_i, i - 1)) or 0
+    end
+  end
+
+  return -(sign * (hours * 3600 + minutes * 60 + seconds)), i
+end
+
+local function parse_tz_name(text, index)
+  text = tostring(text or "")
+  local i = index or 1
+  local start_i = i
+  while text:sub(i, i):match("%a") do
+    i = i + 1
+  end
+  if i == start_i then
+    return nil, index
+  end
+  return text:sub(start_i, i - 1), i
+end
+
+local function is_leap_year(year)
+  return (year % 4 == 0 and year % 100 ~= 0) or (year % 400 == 0)
+end
+
+local function days_in_month(year, mon)
+  if mon == 2 then
+    return is_leap_year(year) and 29 or 28
+  end
+  local days = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
+  return days[mon] or 30
+end
+
+local function days_before_year(year)
+  local days = 0
+  local y = 1970
+  while y < year do
+    days = days + (is_leap_year(y) and 366 or 365)
+    y = y + 1
+  end
+  return days
+end
+
+local function days_before_month(year, mon)
+  local days = 0
+  local m = 1
+  while m < mon do
+    days = days + days_in_month(year, m)
+    m = m + 1
+  end
+  return days
+end
+
+local function weekday(year, mon, day)
+  local days = days_before_year(year) + days_before_month(year, mon) + day - 1
+  return (days + 4) % 7
+end
+
+local function year_from_epoch(sec)
+  local days = math.floor((tonumber(sec) or 0) / 86400)
+  local year = 1970
+  while true do
+    local year_days = is_leap_year(year) and 366 or 365
+    if days < year_days then
+      return year
+    end
+    days = days - year_days
+    year = year + 1
+  end
+end
+
+local function local_epoch(year, mon, day, hour, min, sec)
+  local days = days_before_year(year) + days_before_month(year, mon) + day - 1
+  return days * 86400 + (hour or 0) * 3600 + (min or 0) * 60 + (sec or 0)
+end
+
+local function parse_rule_time(text)
+  text = trim(text)
+  if text == "" then
+    return 2 * 3600
+  end
+
+  local sign = 1
+  if text:sub(1, 1) == "-" then
+    sign = -1
+    text = text:sub(2)
+  elseif text:sub(1, 1) == "+" then
+    text = text:sub(2)
+  end
+
+  local h, m, s = text:match("^(%d+):(%d+):(%d+)$")
+  if not h then
+    h, m = text:match("^(%d+):(%d+)$")
+  end
+  if not h then
+    h = text:match("^(%d+)$")
+  end
+  if not h then
+    return 2 * 3600
+  end
+  return sign * ((tonumber(h) or 0) * 3600 + (tonumber(m) or 0) * 60 + (tonumber(s) or 0))
+end
+
+local function parse_dst_rule(text)
+  local rule_text, time_text = tostring(text or ""):match("^([^/]+)/*(.*)$")
+  local mon, week, dow = tostring(rule_text or ""):match("^M(%d+)%.(%d+)%.(%d+)$")
+  if not mon then
+    return nil
+  end
+  return {
+    mon = tonumber(mon),
+    week = tonumber(week),
+    dow = tonumber(dow),
+    time_sec = parse_rule_time(time_text),
+  }
+end
+
+local function transition_day(year, rule)
+  local first_dow = weekday(year, rule.mon, 1)
+  local day = 1 + ((rule.dow - first_dow + 7) % 7) + (rule.week - 1) * 7
+  local max_day = days_in_month(year, rule.mon)
+  if rule.week == 5 and day > max_day then
+    day = day - 7
+  end
+  return day
+end
+
+local function transition_utc(year, rule, offset_before)
+  local day = transition_day(year, rule)
+  return local_epoch(year, rule.mon, day, 0, 0, rule.time_sec) - offset_before
+end
+
+local function parse_posix_timezone(tz)
+  tz = trim(tz)
+  local std_name, index = parse_tz_name(tz, 1)
+  if not std_name then
+    return nil
+  end
+  local std_offset, next_index = parse_posix_offset(tz, index)
+  if not std_offset then
+    return nil
+  end
+  index = next_index
+
+  local dst_name
+  dst_name, index = parse_tz_name(tz, index)
+  if not dst_name then
+    return { std_name = std_name, std_offset = std_offset }
+  end
+
+  local dst_offset = std_offset + 3600
+  local ch = tz:sub(index, index)
+  if ch ~= "," and ch ~= "" then
+    local explicit_offset, explicit_index = parse_posix_offset(tz, index)
+    if explicit_offset then
+      dst_offset = explicit_offset
+      index = explicit_index
+    end
+  end
+
+  local parsed = {
+    std_name = std_name,
+    std_offset = std_offset,
+    dst_name = dst_name,
+    dst_offset = dst_offset,
+  }
+  if tz:sub(index, index) ~= "," then
+    return parsed
+  end
+
+  local rules = tz:sub(index + 1)
+  local comma = rules:find(",", 1, true)
+  if not comma then
+    return parsed
+  end
+  parsed.start_rule = parse_dst_rule(rules:sub(1, comma - 1))
+  parsed.end_rule = parse_dst_rule(rules:sub(comma + 1))
+  return parsed
+end
+
+local function timezone_offset_for_epoch(tz, sec)
+  local parsed = parse_posix_timezone(tz)
+  if not parsed then
+    return 0
+  end
+  if not parsed.start_rule or not parsed.end_rule then
+    return parsed.std_offset or 0
+  end
+
+  local year = year_from_epoch((tonumber(sec) or 0) + (parsed.std_offset or 0))
+  local start_utc = transition_utc(year, parsed.start_rule, parsed.std_offset)
+  local end_utc = transition_utc(year, parsed.end_rule, parsed.dst_offset)
+  local in_dst
+  if start_utc < end_utc then
+    in_dst = sec >= start_utc and sec < end_utc
+  else
+    in_dst = sec >= start_utc or sec < end_utc
+  end
+  return in_dst and parsed.dst_offset or parsed.std_offset
+end
+
+local function timezone_label(tz, sec, tm)
+  local parsed = parse_posix_timezone(tz)
+  if not parsed then
+    return trim(tz) ~= "" and trim(tz) or "UTC", false
+  end
+
+  local in_dst = false
+  if type(tm) == "table" then
+    in_dst = tm.isdst == true or tm.dst == true
+  end
+  if parsed.start_rule and parsed.end_rule and type(sec) == "number" then
+    local year = year_from_epoch(sec + (parsed.std_offset or 0))
+    local start_utc = transition_utc(year, parsed.start_rule, parsed.std_offset)
+    local end_utc = transition_utc(year, parsed.end_rule, parsed.dst_offset)
+    if start_utc < end_utc then
+      in_dst = sec >= start_utc and sec < end_utc
+    else
+      in_dst = sec >= start_utc or sec < end_utc
+    end
+  end
+
+  if in_dst and parsed.dst_name then
+    return parsed.dst_name, true
+  end
+  return parsed.std_name or trim(tz), false
+end
+
+local applied_timezone = nil
+
+local function apply_timezone(tz)
+  tz = trim(tz)
+  if tz == "" then
+    tz = "CST-8"
+  end
+  if applied_timezone ~= tz and time and time.settimezone then
+    pcall(time.settimezone, tz)
+    applied_timezone = tz
+  end
+  return tz
+end
+
+local function current_epoch()
+  if time and time.get then
+    local ok, sec = pcall(time.get)
+    if ok and type(sec) == "number" and sec > 0 then
+      return sec
+    end
+  end
+  if rtctime and rtctime.get then
+    local ok, sec = pcall(rtctime.get)
+    if ok and type(sec) == "number" and sec > 0 then
+      return sec
+    end
+  end
+  if os and os.time then
+    local ok, sec = pcall(os.time)
+    if ok and type(sec) == "number" and sec > 0 then
+      return sec
+    end
+  end
+  return nil
+end
+
+local function now_clock(cfg)
+  local tz = apply_timezone(cfg and cfg.TIMEZONE or "CST-8")
+  local epoch = current_epoch()
   if time and time.getlocal then
     local ok, t = pcall(time.getlocal)
     if ok and type(t) == "table" and t.hour then
-      return string.format("%02d:%02d", tonumber(t.hour) or 0, tonumber(t.min) or 0)
+      local name, in_dst = timezone_label(tz, epoch, t)
+      return string.format("%02d:%02d %s%s", tonumber(t.hour) or 0, tonumber(t.min) or 0, name, in_dst and " DST" or "")
     end
   end
-  if time and time.get and time.epoch2cal then
-    local ok, sec = pcall(time.get)
-    if ok and type(sec) == "number" then
-      local ok_cal, cal = pcall(time.epoch2cal, sec)
-      if ok_cal and type(cal) == "table" and cal.hour then
-        return string.format("%02d:%02d", tonumber(cal.hour) or 0, tonumber(cal.min) or 0)
-      end
+  if epoch and time and time.epoch2cal then
+    local offset = timezone_offset_for_epoch(tz, epoch)
+    local ok_cal, cal = pcall(time.epoch2cal, epoch + offset)
+    if ok_cal and type(cal) == "table" and cal.hour then
+      local name, in_dst = timezone_label(tz, epoch, cal)
+      return string.format("%02d:%02d %s%s", tonumber(cal.hour) or 0, tonumber(cal.min) or 0, name, in_dst and " DST" or "")
     end
+  end
+  if epoch and rtctime and rtctime.epoch2cal then
+    local offset = timezone_offset_for_epoch(tz, epoch)
+    local ok_cal, year, mon, day, hour, min = pcall(rtctime.epoch2cal, epoch + offset)
+    if ok_cal and type(year) == "number" and year >= 2024 and type(hour) == "number" then
+      local name, in_dst = timezone_label(tz, epoch, { year = year, mon = mon, day = day, hour = hour, min = min })
+      return string.format("%02d:%02d %s%s", tonumber(hour) or 0, tonumber(min) or 0, name, in_dst and " DST" or "")
+    end
+  end
+  if epoch and os and os.date then
+    local offset = timezone_offset_for_epoch(tz, epoch)
+    local ok, t = pcall(os.date, "!*t", epoch + offset)
+    if ok and type(t) == "table" and t.hour then
+      local name, in_dst = timezone_label(tz, epoch, t)
+      return string.format("%02d:%02d %s%s", tonumber(t.hour) or 0, tonumber(t.min) or 0, name, in_dst and " DST" or "")
+      end
   end
   return ""
 end
@@ -317,6 +642,7 @@ function M.new(cfg)
     last_emotion_ms = 0,
     metrics = {},
   }
+  apply_timezone(cfg and cfg.TIMEZONE or "CST-8")
 
   local function append_message(role, content)
     content = text_or(content, "")
@@ -563,7 +889,7 @@ function M.new(cfg)
     if self.last_state == "idle" then
       local ts = now_ms()
       if ts > 0 and self.last_status_ms > 0 and (ts - self.last_status_ms) > 10000 then
-        local clock = now_clock()
+        local clock = now_clock(self.cfg)
         if clock ~= "" then
           set_label(self.ui.status, clock)
         end

@@ -23,8 +23,14 @@
 #define AUDIO_DEFAULT_READ 4096u
 #define AUDIO_READ_CAP 8192u
 #define AUDIO_I2S_PENDING_CAP AUDIO_READ_CAP
+#define AUDIO_PCM_RING_CAP (512u * 1024u)
+#define AUDIO_PCM_RING_LOW_BYTES (32u * 1024u)
+#define AUDIO_PCM_RING_RESUME_BYTES (128u * 1024u)
+#define AUDIO_PCM_RING_START_BYTES AUDIO_PCM_RING_RESUME_BYTES
 #define AUDIO_PLAY_TASK_STACK 12288u
+#define AUDIO_PRODUCER_TASK_STACK 12288u
 #define AUDIO_PLAY_TASK_PRIORITY 8u
+#define AUDIO_PRODUCER_TASK_PRIORITY 7u
 #define AUDIO_PLAY_TASK_CORE 0
 #define AUDIO_PLAY_TASK_CHUNK_BYTES 4096u
 #define AUDIO_PLAY_TASK_TIMEOUT_MS 80u
@@ -57,12 +63,15 @@ typedef struct audio_instance_t {
     void *file;
     void *i2s_stream;
     void *play_task;
+    void *producer_task;
     esp_audio_simple_dec_handle_t decoder;
     uint8_t *in_buf;
     uint8_t *prefetch_buf;
     uint8_t *out_buf;
     uint8_t *read_buf;
+    uint8_t *i2s_task_buf;
     uint8_t *i2s_pending_buf;
+    uint8_t *pcm_ring_buf;
     float *dsp_buf;
     float *vbass_buf;
     size_t in_cap;
@@ -71,9 +80,14 @@ typedef struct audio_instance_t {
     size_t prefetch_len;
     size_t out_cap;
     size_t read_cap;
+    size_t i2s_task_cap;
     size_t i2s_pending_cap;
     size_t i2s_pending_pos;
     size_t i2s_pending_len;
+    size_t pcm_ring_cap;
+    size_t pcm_ring_read_pos;
+    size_t pcm_ring_write_pos;
+    size_t pcm_ring_len;
     size_t dsp_cap;
     size_t vbass_cap;
     size_t pending_len;
@@ -126,10 +140,21 @@ typedef struct audio_instance_t {
     volatile uint8_t play_task_running;
     volatile uint8_t play_task_eof;
     volatile uint8_t play_task_error;
+    volatile uint8_t play_task_paused;
+    volatile uint8_t play_task_buffering;
+    volatile uint8_t producer_task_running;
+    volatile uint8_t producer_task_eof;
+    volatile uint8_t producer_task_error;
+    volatile uint8_t pcm_ring_eof;
+    volatile uint8_t pcm_ring_started;
     uint32_t play_task_chunk_bytes;
     uint32_t play_task_timeout_ms;
+    uint32_t producer_task_chunk_bytes;
     uint32_t play_task_written_bytes;
     uint32_t play_task_iterations;
+    uint32_t producer_task_iterations;
+    uint32_t producer_task_decoded_bytes;
+    uint32_t play_task_buffer_events;
     audio_dsp_filter_t hpf;
     audio_dsp_filter_t eq[AUDIO_EQ_MAX_BANDS];
     audio_dsp_filter_t vbass_low_hpf_filter;
@@ -143,6 +168,7 @@ typedef struct audio_instance_t {
 static const module_host_api_v1 *s_host = NULL;
 static void audio_play_task_stop_internal(audio_instance_t *inst, uint32_t wait_ms);
 static void audio_play_task_exit(audio_instance_t *inst) __attribute__((noreturn));
+static void audio_producer_task_exit(audio_instance_t *inst) __attribute__((noreturn));
 
 static const module_manifest_t s_manifest = {
     MODULE_MANIFEST_MAGIC,
@@ -793,6 +819,125 @@ static void audio_reset_i2s_pending(audio_instance_t *inst)
     inst->i2s_pending_len = 0;
 }
 
+static void audio_reset_pcm_ring(audio_instance_t *inst)
+{
+    if (!inst) {
+        return;
+    }
+    inst->pcm_ring_read_pos = 0;
+    inst->pcm_ring_write_pos = 0;
+    inst->pcm_ring_len = 0;
+    inst->pcm_ring_eof = 0;
+    inst->pcm_ring_started = 0;
+    inst->play_task_paused = 0;
+    inst->play_task_buffering = 0;
+    inst->producer_task_running = 0;
+    inst->producer_task_eof = 0;
+    inst->producer_task_error = 0;
+}
+
+static size_t audio_frame_bytes(const audio_instance_t *inst)
+{
+    size_t channels = 1;
+    size_t bits = 16;
+    if (inst) {
+        channels = inst->output_channels ? inst->output_channels : 1u;
+        bits = inst->bits_per_sample ? inst->bits_per_sample : 16u;
+    }
+    return channels * (bits / 8u);
+}
+
+static size_t audio_align_pcm_bytes(const audio_instance_t *inst, size_t bytes)
+{
+    size_t frame = audio_frame_bytes(inst);
+    if (frame == 0) {
+        frame = 2u;
+    }
+    return (bytes / frame) * frame;
+}
+
+static size_t audio_pcm_ring_used(const audio_instance_t *inst)
+{
+    size_t read_pos = 0;
+    size_t write_pos = 0;
+    if (!inst || inst->pcm_ring_cap == 0) {
+        return 0;
+    }
+    read_pos = inst->pcm_ring_read_pos;
+    write_pos = inst->pcm_ring_write_pos;
+    if (write_pos >= read_pos) {
+        return write_pos - read_pos;
+    }
+    return inst->pcm_ring_cap - read_pos + write_pos;
+}
+
+static size_t audio_pcm_ring_free(const audio_instance_t *inst)
+{
+    size_t used = audio_pcm_ring_used(inst);
+    size_t frame = audio_frame_bytes(inst);
+    if (!inst || inst->pcm_ring_cap <= used + frame) {
+        return 0;
+    }
+    return audio_align_pcm_bytes(inst, inst->pcm_ring_cap - used - frame);
+}
+
+static int audio_pcm_ring_push(audio_instance_t *inst, const uint8_t *data, size_t len)
+{
+    size_t first = 0;
+    size_t free_bytes = 0;
+    if (!inst || !inst->pcm_ring_buf || !data || len == 0) {
+        return 1;
+    }
+    len = audio_align_pcm_bytes(inst, len);
+    free_bytes = audio_pcm_ring_free(inst);
+    if (len == 0) {
+        return 1;
+    }
+    if (len > free_bytes) {
+        audio_set_error(inst, "audio: pcm ring overflow");
+        return 0;
+    }
+    first = inst->pcm_ring_cap - inst->pcm_ring_write_pos;
+    if (first > len) {
+        first = len;
+    }
+    audio_copy_bytes(inst->pcm_ring_buf + inst->pcm_ring_write_pos, data, first);
+    if (len > first) {
+        audio_copy_bytes(inst->pcm_ring_buf, data + first, len - first);
+    }
+    inst->pcm_ring_write_pos = (inst->pcm_ring_write_pos + len) % inst->pcm_ring_cap;
+    inst->pcm_ring_len = audio_pcm_ring_used(inst);
+    return 1;
+}
+
+static size_t audio_pcm_ring_pop(audio_instance_t *inst, uint8_t *dst, size_t max_bytes)
+{
+    size_t len = 0;
+    size_t first = 0;
+    if (!inst || !inst->pcm_ring_buf || !dst || max_bytes == 0) {
+        return 0;
+    }
+    len = audio_pcm_ring_used(inst);
+    if (len > max_bytes) {
+        len = max_bytes;
+    }
+    len = audio_align_pcm_bytes(inst, len);
+    if (len == 0) {
+        return 0;
+    }
+    first = inst->pcm_ring_cap - inst->pcm_ring_read_pos;
+    if (first > len) {
+        first = len;
+    }
+    audio_copy_bytes(dst, inst->pcm_ring_buf + inst->pcm_ring_read_pos, first);
+    if (len > first) {
+        audio_copy_bytes(dst + first, inst->pcm_ring_buf, len - first);
+    }
+    inst->pcm_ring_read_pos = (inst->pcm_ring_read_pos + len) % inst->pcm_ring_cap;
+    inst->pcm_ring_len = audio_pcm_ring_used(inst);
+    return len;
+}
+
 static void audio_i2s_stop_internal(audio_instance_t *inst)
 {
     if (!inst || !inst->i2s_stream) {
@@ -848,9 +993,16 @@ static void audio_close_internal(audio_instance_t *inst)
     inst->play_task_stop = 0;
     inst->play_task_eof = 0;
     inst->play_task_error = 0;
+    inst->play_task_paused = 0;
+    inst->producer_task_eof = 0;
+    inst->producer_task_error = 0;
     inst->play_task_written_bytes = 0;
     inst->play_task_iterations = 0;
+    inst->producer_task_iterations = 0;
+    inst->producer_task_decoded_bytes = 0;
+    inst->play_task_buffer_events = 0;
     audio_reset_i2s_pending(inst);
+    audio_reset_pcm_ring(inst);
     audio_reset_filter_state(inst);
 }
 
@@ -1721,6 +1873,46 @@ static int audio_read_pcm(audio_instance_t *inst, uint8_t *dst, size_t want, siz
     return 0;
 }
 
+static int audio_pcm_ring_fill_once(audio_instance_t *inst, size_t chunk, size_t *out_produced)
+{
+    size_t free_bytes = 0;
+    size_t want = 0;
+    size_t produced = 0;
+    if (out_produced) {
+        *out_produced = 0;
+    }
+    if (!inst || inst->pcm_ring_eof) {
+        return 1;
+    }
+    free_bytes = audio_pcm_ring_free(inst);
+    want = chunk ? chunk : AUDIO_PLAY_TASK_CHUNK_BYTES;
+    if (want > inst->read_cap) {
+        want = inst->read_cap;
+    }
+    if (want > free_bytes) {
+        want = free_bytes;
+    }
+    want = audio_align_pcm_bytes(inst, want);
+    if (want == 0) {
+        return 1;
+    }
+    if (audio_read_pcm(inst, inst->read_buf, want, &produced) < 0) {
+        return 0;
+    }
+    if (produced == 0) {
+        inst->pcm_ring_eof = 1;
+        return 1;
+    }
+    produced = audio_align_pcm_bytes(inst, produced);
+    if (produced > 0 && !audio_pcm_ring_push(inst, inst->read_buf, produced)) {
+        return 0;
+    }
+    if (out_produced) {
+        *out_produced = produced;
+    }
+    return 1;
+}
+
 static int audio_i2s_write_pcm(audio_instance_t *inst,
                                const uint8_t *data,
                                size_t len,
@@ -1819,6 +2011,100 @@ static void audio_play_task_exit(audio_instance_t *inst)
     }
 }
 
+static void audio_producer_task_exit(audio_instance_t *inst)
+{
+    module_task_api_t task = {0};
+    module_time_api_t time = {0};
+    void *task_handle = NULL;
+    if (inst) {
+        task = inst->host.task;
+        time = inst->host.time;
+        task_handle = inst->producer_task;
+        inst->producer_task_running = 0;
+        inst->producer_task = NULL;
+    } else if (s_host) {
+        task = s_host->task;
+        time = s_host->time;
+    }
+
+    if (task.remove) {
+        task.remove(task_handle);
+    }
+
+    for (;;) {
+        if (task.delay) {
+            task.delay(1000);
+        } else if (time.delay) {
+            time.delay(1000);
+        } else if (task.yield) {
+            task.yield();
+        }
+    }
+}
+
+static void audio_i2s_producer_task_entry(void *arg)
+{
+    audio_instance_t *inst = (audio_instance_t *)arg;
+    size_t chunk = 0;
+    if (!inst) {
+        audio_producer_task_exit(NULL);
+    }
+    inst->producer_task_running = 1;
+    inst->producer_task_eof = 0;
+    inst->producer_task_error = 0;
+    chunk = inst->producer_task_chunk_bytes ? inst->producer_task_chunk_bytes : AUDIO_PLAY_TASK_CHUNK_BYTES;
+    if (chunk > inst->read_cap) {
+        chunk = inst->read_cap;
+    }
+    if (chunk > inst->i2s_task_cap) {
+        chunk = inst->i2s_task_cap;
+    }
+    if (chunk == 0) {
+        chunk = AUDIO_DEFAULT_READ;
+    }
+
+    while (!inst->play_task_stop) {
+        size_t produced = 0;
+        if (audio_pcm_ring_free(inst) < audio_align_pcm_bytes(inst, chunk)) {
+            if (inst->host.task.delay) {
+                inst->host.task.delay(1);
+            } else if (inst->host.task.yield) {
+                inst->host.task.yield();
+            }
+            continue;
+        }
+        if (!audio_pcm_ring_fill_once(inst, chunk, &produced)) {
+            inst->producer_task_error = 1;
+            inst->play_task_error = 1;
+            break;
+        }
+        if (produced == 0) {
+            if (inst->pcm_ring_eof) {
+                inst->producer_task_eof = 1;
+                break;
+            }
+            if (inst->host.task.delay) {
+                inst->host.task.delay(1);
+            }
+            continue;
+        }
+        inst->producer_task_decoded_bytes += (uint32_t)produced;
+        inst->producer_task_iterations++;
+        if (!inst->prefetch_eof && inst->prefetch_len < inst->prefetch_cap) {
+            if (!audio_prefetch_fill(inst, inst->prefetch_cap, AUDIO_PREFETCH_READ_CHUNK)) {
+                inst->producer_task_error = 1;
+                inst->play_task_error = 1;
+                break;
+            }
+        }
+        if (inst->host.task.yield) {
+            inst->host.task.yield();
+        }
+    }
+
+    audio_producer_task_exit(inst);
+}
+
 static void audio_i2s_play_task_entry(void *arg)
 {
     audio_instance_t *inst = (audio_instance_t *)arg;
@@ -1830,6 +2116,7 @@ static void audio_i2s_play_task_entry(void *arg)
     inst->play_task_running = 1;
     inst->play_task_eof = 0;
     inst->play_task_error = 0;
+    inst->play_task_buffering = 0;
     chunk = inst->play_task_chunk_bytes ? inst->play_task_chunk_bytes : AUDIO_PLAY_TASK_CHUNK_BYTES;
     timeout_ms = inst->play_task_timeout_ms ? inst->play_task_timeout_ms : AUDIO_PLAY_TASK_TIMEOUT_MS;
     if (chunk > inst->read_cap) {
@@ -1840,8 +2127,56 @@ static void audio_i2s_play_task_entry(void *arg)
     }
 
     while (!inst->play_task_stop) {
-        size_t produced = 0;
         size_t written = 0;
+        size_t popped = 0;
+        size_t used = audio_pcm_ring_used(inst);
+
+        if (inst->play_task_paused) {
+            inst->pcm_ring_len = used;
+            if (inst->host.task.delay) {
+                inst->host.task.delay(5);
+            } else if (inst->host.task.yield) {
+                inst->host.task.yield();
+            }
+            continue;
+        }
+
+        if (!inst->pcm_ring_started && !inst->pcm_ring_eof && used < AUDIO_PCM_RING_START_BYTES) {
+            if (!inst->play_task_buffering) {
+                inst->play_task_buffer_events++;
+            }
+            inst->play_task_buffering = 1;
+        }
+
+        if (inst->play_task_buffering) {
+            used = audio_pcm_ring_used(inst);
+            inst->pcm_ring_len = used;
+            if (used >= AUDIO_PCM_RING_RESUME_BYTES || inst->pcm_ring_eof) {
+                inst->play_task_buffering = 0;
+                inst->pcm_ring_started = 1;
+            } else {
+                if (inst->host.task.delay) {
+                    inst->host.task.delay(1);
+                }
+                continue;
+            }
+        }
+
+        used = audio_pcm_ring_used(inst);
+        inst->pcm_ring_len = used;
+        if (used == 0 && inst->pcm_ring_eof) {
+            inst->play_task_eof = 1;
+            break;
+        }
+
+        if (!inst->pcm_ring_eof && inst->pcm_ring_started && used < AUDIO_PCM_RING_LOW_BYTES) {
+            if (!inst->play_task_buffering) {
+                inst->play_task_buffer_events++;
+            }
+            inst->play_task_buffering = 1;
+            continue;
+        }
+
         if (inst->i2s_pending_len > 0) {
             if (!audio_i2s_write_pcm(inst, NULL, 0, timeout_ms, &written)) {
                 inst->play_task_error = 1;
@@ -1857,25 +2192,31 @@ static void audio_i2s_play_task_entry(void *arg)
             }
         }
 
-        if (audio_read_pcm(inst, inst->read_buf, chunk, &produced) < 0) {
-            inst->play_task_error = 1;
-            break;
+        popped = audio_pcm_ring_pop(inst, inst->i2s_task_buf, chunk);
+        if (popped == 0) {
+            if (inst->pcm_ring_eof) {
+                inst->play_task_eof = 1;
+                break;
+            }
+            if (!inst->play_task_buffering) {
+                inst->play_task_buffer_events++;
+            }
+            inst->play_task_buffering = 1;
+            continue;
         }
-        if (produced == 0) {
-            inst->play_task_eof = 1;
-            break;
-        }
-        if (!audio_i2s_write_pcm(inst, inst->read_buf, produced, timeout_ms, &written)) {
+        if (!audio_i2s_write_pcm(inst, inst->i2s_task_buf, popped, timeout_ms, &written)) {
             inst->play_task_error = 1;
             break;
         }
         inst->play_task_written_bytes += (uint32_t)written;
         inst->play_task_iterations++;
-        if (!inst->prefetch_eof && inst->prefetch_len < inst->prefetch_cap) {
-            if (!audio_prefetch_fill(inst, inst->prefetch_cap, AUDIO_PREFETCH_READ_CHUNK)) {
-                inst->play_task_error = 1;
-                break;
+        used = audio_pcm_ring_used(inst);
+        inst->pcm_ring_len = used;
+        if (!inst->pcm_ring_eof && used < AUDIO_PCM_RING_LOW_BYTES) {
+            if (!inst->play_task_buffering) {
+                inst->play_task_buffer_events++;
             }
+            inst->play_task_buffering = 1;
         }
         if (inst->host.task.yield) {
             inst->host.task.yield();
@@ -1891,12 +2232,13 @@ static void audio_play_task_stop_internal(audio_instance_t *inst, uint32_t wait_
     if (!inst) {
         return;
     }
-    if (!inst->play_task && !inst->play_task_running) {
+    if (!inst->play_task && !inst->play_task_running &&
+        !inst->producer_task && !inst->producer_task_running) {
         inst->play_task_stop = 0;
         return;
     }
     inst->play_task_stop = 1;
-    while (inst->play_task_running && waited < wait_ms) {
+    while ((inst->play_task_running || inst->producer_task_running) && waited < wait_ms) {
         if (inst->host.task.delay) {
             inst->host.task.delay(1);
         } else if (inst->host.time.delay) {
@@ -1904,12 +2246,21 @@ static void audio_play_task_stop_internal(audio_instance_t *inst, uint32_t wait_
         }
         waited++;
     }
+    if (inst->producer_task && inst->producer_task_running && inst->host.task.remove) {
+        inst->host.task.remove(inst->producer_task);
+        inst->producer_task_running = 0;
+    }
     if (inst->play_task && inst->play_task_running && inst->host.task.remove) {
         inst->host.task.remove(inst->play_task);
         inst->play_task_running = 0;
     }
+    if (!inst->producer_task_running) {
+        inst->producer_task = NULL;
+    }
     if (!inst->play_task_running) {
         inst->play_task = NULL;
+    }
+    if (!inst->play_task_running && !inst->producer_task_running) {
         inst->play_task_stop = 0;
     }
 }
@@ -2071,7 +2422,7 @@ static int l_audio_play_i2s(lua_State *L)
     if (!inst->i2s_stream || !host->i2s.write) {
         return push_error(L, host, "audio: i2s not started");
     }
-    if (inst->play_task_running) {
+    if (inst->play_task_running || inst->producer_task_running) {
         return push_error(L, host, "audio: play task running");
     }
     if (host->lua.isnumber(L, 1)) {
@@ -2148,14 +2499,17 @@ static int l_audio_play_i2s(lua_State *L)
     return 3;
 }
 
-/* audio.i2s_play_start(opts)。在 .so 内部 task 中连续 decode -> i2s.write。 */
+/* audio.i2s_play_start(opts)。producer decode 到 PCM ring，consumer 只负责写 I2S。 */
 static int l_audio_i2s_play_start(lua_State *L)
 {
     audio_instance_t *inst = instance_from_lua(L);
     const module_host_api_v1 *host = inst ? &inst->host : s_host;
     uint32_t stack_bytes = AUDIO_PLAY_TASK_STACK;
+    uint32_t producer_stack_bytes = AUDIO_PRODUCER_TASK_STACK;
     uint32_t priority = AUDIO_PLAY_TASK_PRIORITY;
+    uint32_t producer_priority = AUDIO_PRODUCER_TASK_PRIORITY;
     int32_t core = AUDIO_PLAY_TASK_CORE;
+    int32_t producer_core = AUDIO_PLAY_TASK_CORE;
     int64_t v = 0;
     int32_t err = MODULE_OK;
     if (!inst || !host || !inst->opened) {
@@ -2167,7 +2521,7 @@ static int l_audio_i2s_play_start(lua_State *L)
     if (!host->task.create) {
         return push_error(L, host, "audio: missing task host api");
     }
-    if (inst->play_task_running) {
+    if (inst->play_task_running || inst->producer_task_running) {
         host->lua.pushboolean(L, 1);
         return 1;
     }
@@ -2178,7 +2532,7 @@ static int l_audio_i2s_play_start(lua_State *L)
         host->lua.getfield(L, 1, "chunk_bytes");
         if (host->lua.isnumber(L, -1)) {
             v = host->lua.tointeger(L, -1);
-            if (v > 0 && v <= (int64_t)inst->read_cap) {
+            if (v > 0 && v <= (int64_t)inst->read_cap && v <= (int64_t)inst->i2s_task_cap) {
                 inst->play_task_chunk_bytes = (uint32_t)v;
             }
         }
@@ -2202,11 +2556,29 @@ static int l_audio_i2s_play_start(lua_State *L)
         }
         host->lua.settop(L, 1);
 
+        host->lua.getfield(L, 1, "producer_stack_bytes");
+        if (host->lua.isnumber(L, -1)) {
+            v = host->lua.tointeger(L, -1);
+            if (v >= 4096 && v <= 32768) {
+                producer_stack_bytes = (uint32_t)v;
+            }
+        }
+        host->lua.settop(L, 1);
+
         host->lua.getfield(L, 1, "priority");
         if (host->lua.isnumber(L, -1)) {
             v = host->lua.tointeger(L, -1);
             if (v > 0 && v <= 24) {
                 priority = (uint32_t)v;
+            }
+        }
+        host->lua.settop(L, 1);
+
+        host->lua.getfield(L, 1, "producer_priority");
+        if (host->lua.isnumber(L, -1)) {
+            v = host->lua.tointeger(L, -1);
+            if (v > 0 && v <= 24) {
+                producer_priority = (uint32_t)v;
             }
         }
         host->lua.settop(L, 1);
@@ -2219,18 +2591,43 @@ static int l_audio_i2s_play_start(lua_State *L)
             }
         }
         host->lua.settop(L, 1);
+
+        host->lua.getfield(L, 1, "producer_core");
+        if (host->lua.isnumber(L, -1)) {
+            v = host->lua.tointeger(L, -1);
+            if (v >= -1 && v <= 1) {
+                producer_core = (int32_t)v;
+            }
+        }
+        host->lua.settop(L, 1);
     }
 
     audio_play_task_stop_internal(inst, AUDIO_PLAY_TASK_STOP_WAIT_MS);
     inst->play_task_stop = 0;
     inst->play_task_eof = 0;
     inst->play_task_error = 0;
+    inst->play_task_paused = 0;
+    inst->play_task_buffering = 0;
+    inst->producer_task_eof = 0;
+    inst->producer_task_error = 0;
+    inst->producer_task_chunk_bytes = inst->play_task_chunk_bytes;
     inst->play_task_written_bytes = 0;
     inst->play_task_iterations = 0;
+    inst->producer_task_iterations = 0;
+    inst->producer_task_decoded_bytes = 0;
+    inst->play_task_buffer_events = 0;
+    err = host->task.create("audio_fill", audio_i2s_producer_task_entry, inst,
+                            producer_stack_bytes, producer_priority, producer_core, &inst->producer_task);
+    if (err != MODULE_OK || !inst->producer_task) {
+        inst->producer_task = NULL;
+        audio_set_error(inst, "audio: producer task create failed");
+        return push_error(L, host, inst->last_error);
+    }
     err = host->task.create("audio_i2s", audio_i2s_play_task_entry, inst,
                             stack_bytes, priority, core, &inst->play_task);
     if (err != MODULE_OK || !inst->play_task) {
         inst->play_task = NULL;
+        audio_play_task_stop_internal(inst, AUDIO_PLAY_TASK_STOP_WAIT_MS);
         audio_set_error(inst, "audio: play task create failed");
         return push_error(L, host, inst->last_error);
     }
@@ -2249,6 +2646,22 @@ static int l_audio_i2s_play_stop(lua_State *L)
     return 1;
 }
 
+static int l_audio_i2s_play_pause(lua_State *L)
+{
+    audio_instance_t *inst = instance_from_lua(L);
+    const module_host_api_v1 *host = inst ? &inst->host : s_host;
+    int pause = 1;
+    if (!inst || !host) {
+        return push_error(L, host, "audio: missing instance");
+    }
+    if (host->lua.gettop(L) >= 1) {
+        pause = host->lua.toboolean(L, 1) ? 1 : 0;
+    }
+    inst->play_task_paused = pause ? 1 : 0;
+    host->lua.pushboolean(L, 1);
+    return 1;
+}
+
 static int l_audio_i2s_play_state(lua_State *L)
 {
     audio_instance_t *inst = instance_from_lua(L);
@@ -2256,19 +2669,46 @@ static int l_audio_i2s_play_state(lua_State *L)
     if (!inst || !host) {
         return push_error(L, host, "audio: missing instance");
     }
+    inst->pcm_ring_len = audio_pcm_ring_used(inst);
     host->lua.newtable(L);
     host->lua.pushinteger(L, inst->play_task_running ? 1 : 0);
     host->lua.setfield(L, -2, "running");
     host->lua.pushinteger(L, inst->play_task_eof ? 1 : 0);
     host->lua.setfield(L, -2, "eof");
-    host->lua.pushinteger(L, inst->play_task_error ? 1 : 0);
+    host->lua.pushinteger(L, (inst->play_task_error || inst->producer_task_error) ? 1 : 0);
     host->lua.setfield(L, -2, "error");
+    host->lua.pushinteger(L, inst->play_task_paused ? 1 : 0);
+    host->lua.setfield(L, -2, "paused");
+    host->lua.pushinteger(L, inst->play_task_buffering ? 1 : 0);
+    host->lua.setfield(L, -2, "buffering");
+    host->lua.pushinteger(L, inst->producer_task_running ? 1 : 0);
+    host->lua.setfield(L, -2, "producer_running");
+    host->lua.pushinteger(L, inst->producer_task_eof ? 1 : 0);
+    host->lua.setfield(L, -2, "producer_eof");
+    host->lua.pushinteger(L, inst->producer_task_error ? 1 : 0);
+    host->lua.setfield(L, -2, "producer_error");
     host->lua.pushinteger(L, (int64_t)inst->play_task_written_bytes);
     host->lua.setfield(L, -2, "written_bytes");
     host->lua.pushinteger(L, (int64_t)inst->play_task_iterations);
     host->lua.setfield(L, -2, "iterations");
+    host->lua.pushinteger(L, (int64_t)inst->producer_task_iterations);
+    host->lua.setfield(L, -2, "producer_iterations");
+    host->lua.pushinteger(L, (int64_t)inst->producer_task_decoded_bytes);
+    host->lua.setfield(L, -2, "producer_decoded_bytes");
     host->lua.pushinteger(L, (int64_t)inst->i2s_pending_len);
     host->lua.setfield(L, -2, "pending_bytes");
+    host->lua.pushinteger(L, (int64_t)inst->pcm_ring_len);
+    host->lua.setfield(L, -2, "pcm_buffer_bytes");
+    host->lua.pushinteger(L, (int64_t)inst->pcm_ring_cap);
+    host->lua.setfield(L, -2, "pcm_buffer_capacity");
+    host->lua.pushinteger(L, AUDIO_PCM_RING_LOW_BYTES);
+    host->lua.setfield(L, -2, "pcm_buffer_low_bytes");
+    host->lua.pushinteger(L, AUDIO_PCM_RING_RESUME_BYTES);
+    host->lua.setfield(L, -2, "pcm_buffer_resume_bytes");
+    host->lua.pushinteger(L, inst->pcm_ring_eof ? 1 : 0);
+    host->lua.setfield(L, -2, "pcm_buffer_eof");
+    host->lua.pushinteger(L, inst->play_task_buffer_events);
+    host->lua.setfield(L, -2, "buffer_events");
     host->lua.pushinteger(L, inst->i2s_short_writes);
     host->lua.setfield(L, -2, "short_writes");
     host->lua.pushstring(L, inst->last_error);
@@ -2307,10 +2747,11 @@ static int l_audio_stats(lua_State *L)
     if (!inst || !host) {
         return push_error(L, host, "audio: missing instance");
     }
+    inst->pcm_ring_len = audio_pcm_ring_used(inst);
     host->lua.newtable(L);
     host->lua.pushinteger(L, inst->in_cap + inst->prefetch_cap + inst->out_cap + inst->read_cap +
-                          inst->i2s_pending_cap + inst->dsp_cap * sizeof(float) +
-                          inst->vbass_cap * sizeof(float));
+                          inst->i2s_task_cap + inst->i2s_pending_cap + inst->pcm_ring_cap +
+                          inst->dsp_cap * sizeof(float) + inst->vbass_cap * sizeof(float));
     host->lua.setfield(L, -2, "module_buffer_bytes");
     host->lua.pushinteger(L, inst->prefetch_cap);
     host->lua.setfield(L, -2, "prefetch_buffer_bytes");
@@ -2320,8 +2761,24 @@ static int l_audio_stats(lua_State *L)
     host->lua.setfield(L, -2, "prefetch_eof");
     host->lua.pushinteger(L, inst->read_cap);
     host->lua.setfield(L, -2, "read_buffer_bytes");
+    host->lua.pushinteger(L, inst->i2s_task_cap);
+    host->lua.setfield(L, -2, "i2s_task_buffer_bytes");
     host->lua.pushinteger(L, inst->i2s_pending_len);
     host->lua.setfield(L, -2, "i2s_pending_bytes");
+    host->lua.pushinteger(L, inst->pcm_ring_cap);
+    host->lua.setfield(L, -2, "pcm_buffer_capacity");
+    host->lua.pushinteger(L, inst->pcm_ring_len);
+    host->lua.setfield(L, -2, "pcm_buffer_bytes");
+    host->lua.pushinteger(L, AUDIO_PCM_RING_LOW_BYTES);
+    host->lua.setfield(L, -2, "pcm_buffer_low_bytes");
+    host->lua.pushinteger(L, AUDIO_PCM_RING_RESUME_BYTES);
+    host->lua.setfield(L, -2, "pcm_buffer_resume_bytes");
+    host->lua.pushinteger(L, inst->play_task_buffering ? 1 : 0);
+    host->lua.setfield(L, -2, "i2s_task_buffering");
+    host->lua.pushinteger(L, inst->play_task_buffer_events);
+    host->lua.setfield(L, -2, "i2s_task_buffer_events");
+    host->lua.pushinteger(L, inst->play_task_paused ? 1 : 0);
+    host->lua.setfield(L, -2, "i2s_task_paused");
     host->lua.pushinteger(L, inst->i2s_short_writes);
     host->lua.setfield(L, -2, "i2s_short_writes");
     host->lua.pushinteger(L, inst->play_task_running ? 1 : 0);
@@ -2330,6 +2787,18 @@ static int l_audio_stats(lua_State *L)
     host->lua.setfield(L, -2, "i2s_task_eof");
     host->lua.pushinteger(L, inst->play_task_error ? 1 : 0);
     host->lua.setfield(L, -2, "i2s_task_error");
+    host->lua.pushinteger(L, inst->producer_task_running ? 1 : 0);
+    host->lua.setfield(L, -2, "i2s_producer_running");
+    host->lua.pushinteger(L, inst->producer_task_eof ? 1 : 0);
+    host->lua.setfield(L, -2, "i2s_producer_eof");
+    host->lua.pushinteger(L, inst->producer_task_error ? 1 : 0);
+    host->lua.setfield(L, -2, "i2s_producer_error");
+    host->lua.pushinteger(L, (int64_t)inst->producer_task_decoded_bytes);
+    host->lua.setfield(L, -2, "i2s_producer_decoded_bytes");
+    host->lua.pushinteger(L, (int64_t)inst->producer_task_iterations);
+    host->lua.setfield(L, -2, "i2s_producer_iterations");
+    host->lua.pushinteger(L, inst->producer_task_chunk_bytes);
+    host->lua.setfield(L, -2, "i2s_producer_chunk_bytes");
     host->lua.pushinteger(L, (int64_t)inst->play_task_written_bytes);
     host->lua.setfield(L, -2, "i2s_task_written_bytes");
     host->lua.pushinteger(L, (int64_t)inst->play_task_iterations);
@@ -2420,7 +2889,9 @@ AUDIO_MODULE_EXPORT int32_t module_create_v2(module_host_resolve_v1_fn resolve,
     inst->prefetch_cap = AUDIO_PREFETCH_CAP;
     inst->out_cap = AUDIO_OUT_INIT;
     inst->read_cap = AUDIO_READ_CAP;
+    inst->i2s_task_cap = AUDIO_READ_CAP;
     inst->i2s_pending_cap = AUDIO_I2S_PENDING_CAP;
+    inst->pcm_ring_cap = AUDIO_PCM_RING_CAP;
     inst->dsp_cap = AUDIO_DSP_CHUNK_SAMPLES;
     inst->vbass_cap = AUDIO_DSP_CHUNK_SAMPLES;
     inst->volume_q15 = 32768;
@@ -2456,12 +2927,16 @@ AUDIO_MODULE_EXPORT int32_t module_create_v2(module_host_resolve_v1_fn resolve,
     inst->prefetch_buf = (uint8_t *)inst->host.heap.malloc(inst->prefetch_cap, MODULE_HEAP_PSRAM | MODULE_HEAP_8BIT);
     inst->out_buf = (uint8_t *)inst->host.heap.malloc(inst->out_cap, MODULE_HEAP_PSRAM | MODULE_HEAP_8BIT);
     inst->read_buf = (uint8_t *)inst->host.heap.malloc(inst->read_cap, MODULE_HEAP_PSRAM | MODULE_HEAP_8BIT);
+    inst->i2s_task_buf = (uint8_t *)inst->host.heap.malloc(inst->i2s_task_cap,
+                                                           MODULE_HEAP_PSRAM | MODULE_HEAP_8BIT);
     inst->i2s_pending_buf = (uint8_t *)inst->host.heap.malloc(inst->i2s_pending_cap,
                                                               MODULE_HEAP_INTERNAL | MODULE_HEAP_8BIT);
     if (!inst->i2s_pending_buf) {
         inst->i2s_pending_buf = (uint8_t *)inst->host.heap.malloc(inst->i2s_pending_cap,
                                                                   MODULE_HEAP_PSRAM | MODULE_HEAP_8BIT);
     }
+    inst->pcm_ring_buf = (uint8_t *)inst->host.heap.malloc(inst->pcm_ring_cap,
+                                                           MODULE_HEAP_PSRAM | MODULE_HEAP_8BIT);
     inst->dsp_buf = (float *)inst->host.heap.malloc(inst->dsp_cap * sizeof(float),
                                                     MODULE_HEAP_INTERNAL | MODULE_HEAP_8BIT);
     if (!inst->dsp_buf) {
@@ -2475,7 +2950,8 @@ AUDIO_MODULE_EXPORT int32_t module_create_v2(module_host_resolve_v1_fn resolve,
                                                           MODULE_HEAP_PSRAM | MODULE_HEAP_8BIT);
     }
     if (!inst->in_buf || !inst->prefetch_buf || !inst->out_buf || !inst->read_buf ||
-        !inst->i2s_pending_buf || !inst->dsp_buf || !inst->vbass_buf) {
+        !inst->i2s_task_buf || !inst->i2s_pending_buf || !inst->pcm_ring_buf ||
+        !inst->dsp_buf || !inst->vbass_buf) {
         if (inst->in_buf) {
             inst->host.heap.free(inst->in_buf);
         }
@@ -2488,8 +2964,14 @@ AUDIO_MODULE_EXPORT int32_t module_create_v2(module_host_resolve_v1_fn resolve,
         if (inst->read_buf) {
             inst->host.heap.free(inst->read_buf);
         }
+        if (inst->i2s_task_buf) {
+            inst->host.heap.free(inst->i2s_task_buf);
+        }
         if (inst->i2s_pending_buf) {
             inst->host.heap.free(inst->i2s_pending_buf);
+        }
+        if (inst->pcm_ring_buf) {
+            inst->host.heap.free(inst->pcm_ring_buf);
         }
         if (inst->dsp_buf) {
             inst->host.heap.free(inst->dsp_buf);
@@ -2525,6 +3007,7 @@ AUDIO_MODULE_EXPORT int32_t module_luaopen_v1(void *instance, lua_State *L)
     set_function_field(L, host, "play_i2s", l_audio_play_i2s, inst);
     set_function_field(L, host, "i2s_play_start", l_audio_i2s_play_start, inst);
     set_function_field(L, host, "i2s_play_stop", l_audio_i2s_play_stop, inst);
+    set_function_field(L, host, "i2s_play_pause", l_audio_i2s_play_pause, inst);
     set_function_field(L, host, "i2s_play_state", l_audio_i2s_play_state, inst);
     set_function_field(L, host, "i2s_stop", l_audio_i2s_stop, inst);
     set_function_field(L, host, "close", l_audio_close, inst);
@@ -2553,8 +3036,14 @@ AUDIO_MODULE_EXPORT void module_destroy_v1(void *instance)
     if (inst->read_buf) {
         inst->host.heap.free(inst->read_buf);
     }
+    if (inst->i2s_task_buf) {
+        inst->host.heap.free(inst->i2s_task_buf);
+    }
     if (inst->i2s_pending_buf) {
         inst->host.heap.free(inst->i2s_pending_buf);
+    }
+    if (inst->pcm_ring_buf) {
+        inst->host.heap.free(inst->pcm_ring_buf);
     }
     if (inst->dsp_buf) {
         inst->host.heap.free(inst->dsp_buf);

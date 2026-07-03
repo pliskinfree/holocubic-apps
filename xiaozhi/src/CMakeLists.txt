@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.16)
 
 set(MODULE_ABI_DIR "" CACHE PATH "Directory containing module_abi.h")
 
+if(NOT MODULE_ABI_DIR AND EXISTS "${CMAKE_SOURCE_DIR}/module_abi.h")
+    set(MODULE_ABI_DIR "${CMAKE_SOURCE_DIR}")
+endif()
+
 if(NOT MODULE_ABI_DIR AND DEFINED ENV{CUBICLUA_ROOT} AND EXISTS "$ENV{CUBICLUA_ROOT}/src/dynmod/module_abi.h")
     set(MODULE_ABI_DIR "$ENV{CUBICLUA_ROOT}/src/dynmod")
 endif()

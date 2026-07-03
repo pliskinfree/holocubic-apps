@@ -7,15 +7,15 @@ end
 DEVTOOLS = {}
 local APP = DEVTOOLS
 
-APP.VERSION = "2026-05-09-devtools-v1"
+APP.VERSION = "2026-07-03-devtools-stream-v2"
 APP.ROOT_PATH = "/sd"
 APP.APPS_PATH = "/sd/apps"
 APP.RUN_APP_ID = "devrun"
 APP.RUN_APP_DIR = "/sd/apps/devrun"
 APP.RUN_APP_MAIN = "/sd/apps/devrun/main.lua"
 APP.RUN_APP_INFO = "/sd/apps/devrun/app.info"
-APP.MAX_FILE_SIZE = 8 * 1024 * 1024
-APP.CHUNK_SIZE = 64 * 1024
+APP.MAX_FILE_SIZE = 64 * 1024 * 1024
+APP.CHUNK_SIZE = 256 * 1024
 APP.PREVIEW_TEXT_LIMIT = 256 * 1024
 APP.PREVIEW_MEDIA_LIMIT = 3 * 1024 * 1024
 APP.MAX_CODE_BYTES = 192 * 1024
@@ -350,6 +350,9 @@ local function read_file_chunk(path, offset, size)
   end
   if st.is_dir then
     return nil, "path is directory"
+  end
+  if (st.size or 0) > APP.MAX_FILE_SIZE then
+    return nil, "file too large"
   end
   offset = to_int(offset, 0)
   size = safe_chunk_size(size)
@@ -708,7 +711,7 @@ function APP.api_read(req)
   end
   local info, read_err = read_file_chunk(path, q.offset, q.size)
   if not info then
-    return error_response(read_err == "not found" and "404 Not Found" or "400 Bad Request", read_err or "read failed")
+    return error_response(read_err == "not found" and "404 Not Found" or (read_err == "file too large" and "413 Payload Too Large" or "400 Bad Request"), read_err or "read failed")
   end
   mark_action("read", basename(path))
   update_screen()
@@ -1340,7 +1343,7 @@ h1{margin:0;font-size:26px;line-height:1.1;letter-spacing:0}
 const APP_BASE = "__APP_BASE__";
 const RUN_APP_ID = "__RUN_APP_ID__";
 const textDecoder = new TextDecoder();
-let serverInfo = {root_path:"/sd", chunk_size:65536, max_file_size:8388608, preview_text_limit:262144, preview_media_limit:3145728};
+let serverInfo = {root_path:"/sd", chunk_size:262144, max_file_size:67108864, preview_text_limit:262144, preview_media_limit:3145728};
 let currentDir = "/sd";
 let currentItems = [];
 let selectedItem = null;
@@ -1383,6 +1386,14 @@ function parentPath(path){
 }
 function joinPath(dir, name){
   return dir === serverInfo.root_path ? serverInfo.root_path + "/" + name : dir + "/" + name;
+}
+function fileWebUrl(path){
+  const root = serverInfo.root_path || "/sd";
+  const text = String(path || "");
+  if(text === root) return "/";
+  const prefix = root.endsWith("/") ? root : root + "/";
+  const rel = text.startsWith(prefix) ? text.slice(prefix.length) : text.replace(/^\/+/, "");
+  return "/" + rel.split("/").filter(Boolean).map(encodeURIComponent).join("/");
 }
 function fileExt(name){
   const m = String(name || "").toLowerCase().match(/\.([a-z0-9_-]+)$/);
@@ -1573,16 +1584,15 @@ async function previewSelected(){
 async function downloadSelected(){
   if(!selectedItem) throw new Error("请先选择文件");
   if(selectedItem.is_dir) throw new Error("目录不能直接下载");
-  const bytes = await fetchFileBytes(selectedItem.path, selectedItem.size || 0, (done,total)=>showStatus("下载读取 " + fmtBytes(done) + " / " + fmtBytes(total || 0), false));
-  const url = URL.createObjectURL(new Blob([bytes], {type:selectedItem.mime || "application/octet-stream"}));
+  if(Number(selectedItem.size || 0) > Number(serverInfo.max_file_size || 0)) throw new Error("文件超过 " + fmtBytes(serverInfo.max_file_size) + " 传输上限");
   const a = document.createElement("a");
-  a.href = url;
+  a.href = fileWebUrl(selectedItem.path);
   a.download = selectedItem.name || "download.bin";
+  a.rel = "noopener";
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
-  showStatus("已下载 " + (selectedItem.name || ""), false);
+  showStatus("已开始流式下载 " + (selectedItem.name || ""), false);
 }
 async function renamePath(item){
   const nextName = (prompt("输入新名称", item.name || "") || "").trim();

@@ -323,10 +323,10 @@ DevRun 适合快速试代码；确认后再整理成独立 app 目录和 `app.in
 
 | 方法 | 路径 | 用法 |
 | --- | --- | --- |
-| `GET` | `/info` | 服务信息、chunk 大小、DevRun 路径 |
+| `GET` | `/info` | 服务信息、chunk 大小、64MB 文件传输上限、DevRun 路径 |
 | `GET` | `/list?path=/sd/apps` | 列目录 |
 | `GET` | `/stat?path=/sd/apps/hello/main.lua` | 文件/目录信息 |
-| `GET` | `/read?path=...&offset=0&size=65536` | 分片读取文件 |
+| `GET` | `/read?path=...&offset=0&size=262144` | 分片读取文件 |
 | `GET` | `/apps` | 可编辑 SD app 列表 |
 | `GET` | `/code/read` | 读取 DevRun main.lua |
 | `POST` | `/mkdir?path=/sd/apps/hello` | 创建目录 |
@@ -346,6 +346,9 @@ curl -X POST \
   --data-binary @hello/package/main.lua \
   "http://192.168.0.140/devtools/api/code/run"
 ```
+
+DevTools 文件传输按分片/浏览器下载流处理，不把完整文件一次性读入 Lua 内存；
+单文件最大 64MB。
 
 上传完整 app 时，推荐先在 DevTools 网页里创建 `/sd/apps/hello`，再上传
 `app.info`、`main.lua`、`main.png` 等文件，最后重扫 app 列表。

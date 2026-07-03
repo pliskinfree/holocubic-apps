@@ -80,15 +80,22 @@ $env:PATH = (Join-Path $pio "packages\tool-cmake\bin") + ";" +
             (Join-Path $pio "packages\toolchain-xtensa-esp-elf\bin") + ";" +
             (Join-Path $pio "penv\Scripts") + ";" + $env:PATH
 
-$env:CUBICLUA_ROOT="E:\cubicsrc\cubic_lua\cubic_arduino\cubic-develop"
-cmake -S . -B build -G Ninja -DIDF_TARGET=esp32s3
-cmake --build build --target so --config Release
+$env:PYTHONUTF8 = "1"
+$env:PYTHONIOENCODING = "utf-8"
+$xzBuild = "E:\cubicsrc\APPS\xiaozhi_app_build"
+$wakeBuild = "E:\cubicsrc\APPS\xiaozhi_wake_build"
+
+cmake -S . -B $xzBuild -G Ninja -DIDF_TARGET=esp32s3
+cmake --build $xzBuild --target so --config Release
+cmake -S wake -B $wakeBuild -G Ninja -DIDF_TARGET=esp32s3
+cmake --build $wakeBuild --target so --config Release
 ```
 
 产物：
 
 ```text
-xiaozhi/src/build/xiaozhi.so
+E:\cubicsrc\APPS\xiaozhi_app_build\xiaozhi.so
+E:\cubicsrc\APPS\xiaozhi_wake_build\wake.so
 ```
 
 ## 上传

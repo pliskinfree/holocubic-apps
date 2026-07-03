@@ -17,8 +17,10 @@ local FLAG_CLICKABLE      = APP.FLAG_CLICKABLE
 local LV_LAYOUT_NONE_VALUE = APP.LV_LAYOUT_NONE_VALUE
 
 local LYRIC_OFFSETS       = APP.LYRIC_OFFSETS
-local LYRIC_GAP           = APP.LYRIC_GAP
 local LYRIC_CENTER_Y      = APP.LYRIC_CENTER_Y
+local LYRIC_LINE_SPACE    = APP.LYRIC_LINE_SPACE or 4
+local LYRIC_SMALL_LINE_H  = APP.LYRIC_SMALL_LINE_H or 17
+local LYRIC_ACTIVE_LINE_H = APP.LYRIC_ACTIVE_LINE_H or 21
 
 local call                = APP._call
 local text_or             = APP._text_or
@@ -81,7 +83,7 @@ local function style_label(id, font, color, align, opa)
   call(rawget(_G, "lv_obj_set_style_text_opa"), id, opa or 255, MAIN_STYLE)
   call(rawget(_G, "lv_obj_set_style_text_align"), id, align or ALIGN_CENTER, MAIN_STYLE)
   call(rawget(_G, "lv_obj_set_style_text_letter_space"), id, 0, MAIN_STYLE)
-  call(rawget(_G, "lv_obj_set_style_text_line_space"), id, 1, MAIN_STYLE)
+  call(rawget(_G, "lv_obj_set_style_text_line_space"), id, LYRIC_LINE_SPACE, MAIN_STYLE)
 end
 
 local function track_event(obj, dsc)
@@ -222,20 +224,66 @@ end
 --  Lyric rendering
 -- ==================================================================
 
+local function lyric_line_count(text)
+  local wrapped = text_or(text, "")
+  if wrapped == "" then return 0, wrapped end
+  local count = 1
+  local pos = 1
+  while true do
+    local found = wrapped:find("\n", pos, true)
+    if not found then break end
+    count = count + 1
+    pos = found + 1
+  end
+  return count, wrapped
+end
+
+local function lyric_slot_height(text, active)
+  local lines, wrapped = lyric_line_count(text)
+  if lines <= 0 then return 0, wrapped end
+  local line_h = active and LYRIC_ACTIVE_LINE_H or LYRIC_SMALL_LINE_H
+  return lines * line_h + (lines - 1) * LYRIC_LINE_SPACE, wrapped
+end
+
+local function lyric_slot_step(slot)
+  local h = slot and slot.h or 0
+  if h <= 0 then return 0 end
+  return h + LYRIC_LINE_SPACE
+end
+
+local function lyric_active_y(slot, scroll)
+  local h = slot and slot.h or LYRIC_ACTIVE_LINE_H
+  if h <= 0 then h = LYRIC_ACTIVE_LINE_H end
+  return LYRIC_CENTER_Y - math.floor((h - LYRIC_ACTIVE_LINE_H) / 2) - (scroll or 0)
+end
+
+local function lyric_initial_y(rel)
+  if rel == 0 then return LYRIC_CENTER_Y end
+  if rel < 0 then
+    return LYRIC_CENTER_Y + rel * (LYRIC_SMALL_LINE_H + LYRIC_LINE_SPACE)
+  end
+  return LYRIC_CENTER_Y + LYRIC_ACTIVE_LINE_H + LYRIC_LINE_SPACE + (rel - 1) * (LYRIC_SMALL_LINE_H + LYRIC_LINE_SPACE)
+end
+
 local function set_lyric_slot(slot, text, y, active, opa)
   if not slot then return end
+  local h, wrapped = lyric_slot_height(text, active)
   call(lv_obj_set_pos, slot, UI.lyric_slot_x or 0, (UI.lyric_slot_y or 0) + y)
+  if lv_obj_set_height then
+    call(lv_obj_set_height, slot, math.max(1, h))
+  end
   style_label(slot, active and (APP.font_big or APP.font_cn) or APP.font_cn, active and C.text or C.sub, ALIGN_CENTER, opa)
-  set_label(slot, text)
+  set_label(slot, wrapped)
 end
 
 local function render_message_lyrics(text)
   if not UI.lyric_labels then return end
   for i, slot in ipairs(UI.lyric_labels) do
     if i == 3 then
-      set_lyric_slot(slot, text, LYRIC_CENTER_Y, true, 255)
+      local h = lyric_slot_height(text, true)
+      set_lyric_slot(slot, text, lyric_active_y({ h = h }, 0), true, 255)
     else
-      set_lyric_slot(slot, "", LYRIC_CENTER_Y + (i - 3) * LYRIC_GAP, false, 0)
+      set_lyric_slot(slot, "", lyric_initial_y(i - 3), false, 0)
     end
   end
 end
@@ -255,13 +303,30 @@ local function render_lyric_window(track, ms)
   end
 
   lyric_text_at(ms)
-  local scroll = lyric_scroll_px(ms)
+  local slots = {}
+  local active_i = 1
   for i, rel in ipairs(LYRIC_OFFSETS) do
     local line = lines[S.lyric_idx + rel]
-    local y = LYRIC_CENTER_Y + rel * LYRIC_GAP - scroll
     local active = rel == 0
+    local text = line and line.text or ""
+    local h = lyric_slot_height(text, active)
     local opa = active and 255 or (math.abs(rel) >= 2 and 135 or 190)
-    set_lyric_slot(UI.lyric_labels[i], line and line.text or "", y, active, opa)
+    slots[i] = { text = text, active = active, opa = opa, h = h }
+    if active then active_i = i end
+  end
+
+  local active_slot = slots[active_i]
+  local scroll = lyric_scroll_px(ms, lyric_slot_step(active_slot))
+  active_slot.y = lyric_active_y(active_slot, scroll)
+  for i = active_i - 1, 1, -1 do
+    slots[i].y = slots[i + 1].y - lyric_slot_step(slots[i])
+  end
+  for i = active_i + 1, #slots do
+    slots[i].y = slots[i - 1].y + lyric_slot_step(slots[i - 1])
+  end
+
+  for i, info in ipairs(slots) do
+    set_lyric_slot(UI.lyric_labels[i], info.text, info.y, info.active, info.opa)
   end
 end
 
@@ -402,7 +467,7 @@ local function build_ui()
   end
   UI.lyric_labels = {}
   for i, rel in ipairs(LYRIC_OFFSETS) do
-    UI.lyric_labels[i] = label(lyric_parent, UI.lyric_slot_x, UI.lyric_slot_y + LYRIC_CENTER_Y + rel * LYRIC_GAP, UI.lyric_slot_w or LYRIC_W, 24, "", APP.font_cn, C.sub, ALIGN_CENTER)
+    UI.lyric_labels[i] = label(lyric_parent, UI.lyric_slot_x, UI.lyric_slot_y + lyric_initial_y(rel), UI.lyric_slot_w or LYRIC_W, LYRIC_SMALL_LINE_H, "", APP.font_cn, C.sub, ALIGN_CENTER)
   end
 
   UI.prev_icon = nil

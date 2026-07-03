@@ -104,4 +104,4 @@ function Build-Font {
 }
 
 Build-Font -Size 13 -OutputPath $smallOutputPath
-Build-Font -Size 18 -OutputPath $bigOutputPath
+Build-Font -Size 16 -OutputPath $bigOutputPath

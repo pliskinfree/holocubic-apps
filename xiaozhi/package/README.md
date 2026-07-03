@@ -41,6 +41,19 @@
 5. 服务端返回 STT/LLM/TTS 文本事件和二进制 Opus。
 6. Lua 解码 Opus，写入独占 I2S 扬声器输出。
 
+## 本地资源布局
+
+部署时复制整个 `package/` 到 `/sd/apps/xiaozhi/`。动态模块和唤醒模型都从 app
+目录内读取：
+
+```text
+/sd/apps/xiaozhi/xiaozhi.so
+/sd/apps/xiaozhi/wake.so
+/sd/apps/xiaozhi/wake/wn9s_nihaoxiaozhi/_MODEL_INFO_
+/sd/apps/xiaozhi/wake/wn9s_nihaoxiaozhi/wn9_index
+/sd/apps/xiaozhi/wake/wn9s_nihaoxiaozhi/wn9_data
+```
+
 ## 官方资源
 
 资源来自官方 `78/xiaozhi-fonts`：
