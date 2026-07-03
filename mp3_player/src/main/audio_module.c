@@ -14,8 +14,8 @@
 #include "dsps_biquad.h"
 
 #define AUDIO_MODULE_EXPORT __attribute__((visibility("default"), used))
-#define AUDIO_VERSION "0.1.0-esp-audio-codec"
-#define AUDIO_IN_CAP 1024u
+#define AUDIO_VERSION "1.1.0"
+#define AUDIO_IN_CAP 2048u
 #define AUDIO_PREFETCH_CAP (2u * 1024u * 1024u)
 #define AUDIO_PREFETCH_READ_CHUNK 8192u
 #define AUDIO_PREFETCH_LOW_BYTES (128u * 1024u)
@@ -29,8 +29,8 @@
 #define AUDIO_PCM_RING_LOW_BYTES (32u * 1024u)
 #define AUDIO_PCM_RING_RESUME_BYTES (128u * 1024u)
 #define AUDIO_PCM_RING_START_BYTES AUDIO_PCM_RING_RESUME_BYTES
-#define AUDIO_PLAY_TASK_STACK 12288u
-#define AUDIO_PRODUCER_TASK_STACK 12288u
+#define AUDIO_PLAY_TASK_STACK 5120u
+#define AUDIO_PRODUCER_TASK_STACK 6144u
 #define AUDIO_PLAY_TASK_PRIORITY 8u
 #define AUDIO_PRODUCER_TASK_PRIORITY 7u
 #define AUDIO_PLAY_TASK_CORE 0
@@ -2742,6 +2742,22 @@ static int l_audio_i2s_play_state(lua_State *L)
     return 1;
 }
 
+static int l_audio_yield(lua_State *L)
+{
+    audio_instance_t *inst = instance_from_lua(L);
+    const module_host_api_v1 *host = inst ? &inst->host : s_host;
+    if (!host) {
+        return 0;
+    }
+    if (host->task.yield) {
+        host->task.yield();
+    } else if (host->time.yield) {
+        host->time.yield();
+    }
+    host->lua.pushboolean(L, 1);
+    return 1;
+}
+
 static int l_audio_i2s_stop(lua_State *L)
 {
     audio_instance_t *inst = instance_from_lua(L);
@@ -2956,10 +2972,10 @@ AUDIO_MODULE_EXPORT int32_t module_create_v2(module_host_resolve_v1_fn resolve,
     inst->i2s_task_buf = (uint8_t *)inst->host.heap.malloc(inst->i2s_task_cap,
                                                            MODULE_HEAP_PSRAM | MODULE_HEAP_8BIT);
     inst->i2s_pending_buf = (uint8_t *)inst->host.heap.malloc(inst->i2s_pending_cap,
-                                                              MODULE_HEAP_INTERNAL | MODULE_HEAP_8BIT);
+                                                              MODULE_HEAP_PSRAM | MODULE_HEAP_8BIT);
     if (!inst->i2s_pending_buf) {
         inst->i2s_pending_buf = (uint8_t *)inst->host.heap.malloc(inst->i2s_pending_cap,
-                                                                  MODULE_HEAP_PSRAM | MODULE_HEAP_8BIT);
+                                                                  MODULE_HEAP_INTERNAL | MODULE_HEAP_8BIT);
     }
     inst->pcm_ring_buf = (uint8_t *)inst->host.heap.malloc(inst->pcm_ring_cap,
                                                            MODULE_HEAP_PSRAM | MODULE_HEAP_8BIT);
@@ -3024,6 +3040,7 @@ AUDIO_MODULE_EXPORT int32_t module_luaopen_v1(void *instance, lua_State *L)
     host->lua.pushstring(L, AUDIO_VERSION);
     host->lua.setfield(L, -2, "VERSION");
     set_function_field(L, host, "version", l_audio_version, inst);
+    set_function_field(L, host, "yield", l_audio_yield, inst);
     set_function_field(L, host, "set_effects", l_audio_set_effects, inst);
     set_function_field(L, host, "open", l_audio_open, inst);
     set_function_field(L, host, "info", l_audio_info, inst);

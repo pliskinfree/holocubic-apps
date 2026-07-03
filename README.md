@@ -323,7 +323,7 @@ DevRun 适合快速试代码；确认后再整理成独立 app 目录和 `app.in
 
 | 方法 | 路径 | 用法 |
 | --- | --- | --- |
-| `GET` | `/info` | 服务信息、chunk 大小、64MB 文件传输上限、DevRun 路径 |
+| `GET` | `/info` | 服务信息、读取 chunk 大小、64MB 文件传输上限、DevRun 路径 |
 | `GET` | `/list?path=/sd/apps` | 列目录 |
 | `GET` | `/stat?path=/sd/apps/hello/main.lua` | 文件/目录信息 |
 | `GET` | `/read?path=...&offset=0&size=262144` | 分片读取文件 |
@@ -333,7 +333,7 @@ DevRun 适合快速试代码；确认后再整理成独立 app 目录和 `app.in
 | `POST` | `/rename?path=...&new_path=...` | 重命名/移动 |
 | `POST` | `/code/save` | 保存请求 body 到 DevRun main.lua |
 | `POST` | `/code/run` | 保存请求 body 并启动 DevRun |
-| `PUT` | `/upload?path=...&offset=0&total=123` | 分片上传文件 |
+| `PUT` | `/upload?path=...&offset=0&total=123` | 流式上传文件；`offset` 保留给兼容/断点写入 |
 | `DELETE` | `/remove?path=...` | 删除文件 |
 | `DELETE` | `/rmdir?path=...&recursive=1` | 删除目录，可递归 |
 
@@ -347,7 +347,8 @@ curl -X POST \
   "http://192.168.0.140/devtools/api/code/run"
 ```
 
-DevTools 文件传输按分片/浏览器下载流处理，不把完整文件一次性读入 Lua 内存；
+DevTools 上传使用单次 PUT 流式写入，读取 API 仍按块返回，浏览器下载走文件流；
+这些路径都不会把完整文件一次性读入 Lua 内存。
 单文件最大 64MB。
 
 上传完整 app 时，推荐先在 DevTools 网页里创建 `/sd/apps/hello`，再上传

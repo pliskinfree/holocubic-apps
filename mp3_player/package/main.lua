@@ -6,7 +6,7 @@ if prev and prev.stop then
 end
 
 MUSIC_PLAYER_APP = {
-  VERSION = "1.0.2",
+  VERSION = "1.1.0",
   SCREEN_W = 320,
   SCREEN_H = 240,
   APP_DIR = "/sd/apps/mp3_player",
@@ -17,26 +17,35 @@ MUSIC_PLAYER_APP = {
   I2S_ID = 0,
   I2S_BITS = 16,
   DATA_OUT_PIN = 48,
-  BUFFER_COUNT = 12,
-  BUFFER_LEN = 1024,
+  BUFFER_COUNT = 6,
+  BUFFER_LEN = 512,
+  I2S_BUFFER_FALLBACKS = {
+    { count = 6, len = 512 },
+    { count = 4, len = 512 },
+    { count = 4, len = 256 },
+  },
   PLAY_TASK_CHUNK_BYTES = 4096,
   PLAY_TASK_TIMEOUT_MS = 80,
-  PLAY_TASK_STACK_BYTES = 7168,
-  PLAY_TASK_PRIORITY = 3,
+  PLAY_TASK_STACK_BYTES = 5120,
+  PLAY_TASK_PRIORITY = 6,
   PLAY_TASK_CORE = 0,
-  PRODUCER_TASK_STACK_BYTES = 7168,
-  PRODUCER_TASK_PRIORITY = 4,
+  PRODUCER_TASK_STACK_BYTES = 6144,
+  PRODUCER_TASK_PRIORITY = 5,
   PRODUCER_TASK_CORE = 1,
   PLAY_TICK_MS = 25,
-  UI_TICK_MS = 80,
+  UI_TICK_MS = 60,
   PROFILE_AUDIO = false,
   PROFILE_LOG_MS = 2000,
   USE_CANVAS_PROGRESS = false,
   WEB_MUSIC_DIR = "/sd/mp3",
   MP3_PREFETCH_TARGET_BYTES = 1 * 1024 * 1024,
   MP3_PREFETCH_READ_BYTES = 16 * 1024,
-  MP3_PREFETCH_OPEN_BYTES = 512 * 1024,
-  WEB_CHUNK_SIZE = 64 * 1024,
+  MP3_PREFETCH_OPEN_BYTES = 1 * 1024 * 1024,
+  MP3_PREFETCH_UPLOAD_TARGET_BYTES = 2 * 1024 * 1024,
+  MP3_PREFETCH_UPLOAD_READ_BYTES = 2 * 1024 * 1024,
+  WEB_CHUNK_SIZE = 256 * 1024,
+  WEB_UPLOAD_WRITE_BYTES = 16 * 1024,
+  WEB_UPLOAD_YIELD_BYTES = 64 * 1024,
   WEB_MAX_FILE_SIZE = 32 * 1024 * 1024,
   WEB_MAX_HANDLERS = 64,
   WEB_DEBUG = false,
@@ -102,6 +111,8 @@ APP.index = 1
 APP.prof = nil
 APP.web_started = false
 APP.upload_logs = {}
+APP.needs_rescan = false
+APP.rescan_reason = nil
 
 
 APP.eq_settings = {
@@ -138,6 +149,8 @@ APP.state = {
   pcm_bytes = 0,
   play_task_base_pcm_bytes = 0,
   play_task_last_written_bytes = 0,
+  play_task_last_progress_ms = 0,
+  play_task_stall_logged_ms = 0,
   duration_ms = 0,
   clock_base_ms = 0,
   clock_start_ms = 0,
@@ -200,7 +213,7 @@ end
 
 local function log_rate(bytes, elapsed_ms)
   elapsed_ms = math.max(1, tonumber(elapsed_ms) or 1)
-  local per_sec = (tonumber(bytes) or 0) * 1000 / elapsed_ms
+  local per_sec = (tonumber(bytes) or 0) / (elapsed_ms / 1000)
   if per_sec >= 1024 * 1024 then
     return string.format("%.2f MB/s", per_sec / (1024 * 1024))
   end
@@ -443,7 +456,8 @@ function render(){const q=$("search").value.trim().toLowerCase();const list=item
 async function load(){const d=await request("/list");items=d.items||[];render();show("已刷新",false)}
 async function removeFile(name){if(!confirm("确认删除 "+name+" ?"))return;await request("/remove",{method:"DELETE"},{name});await load();show("已删除 "+name,false)}
 function qitem(name){const el=document.createElement("div");el.className="q";el.innerHTML=`<div class="qtop"><strong>${esc(name)}</strong><span class="sub">等待</span></div><div class="bar"><div></div></div>`;$("queue").prepend(el);return{bar:el.querySelector(".bar div"),st:el.querySelector(".sub")}}
-async function uploadOne(f){const qi=qitem(f.name);let off=0;while(off<f.size||(f.size===0&&off===0)){const end=Math.min(off+__UPLOAD_CHUNK__,f.size);qi.st.textContent=bytes(off)+" / "+bytes(f.size);const d=await request("/upload",{method:"PUT",body:f.slice(off,end)},{name:f.name,offset:off,total:f.size});off=Number(d.next_offset||end);qi.bar.style.width=(f.size?Math.round(off*100/f.size):100)+"%";if(f.size===0)break}qi.st.textContent="完成"}
+function uploadRaw(f,qi){return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest();xhr.open("PUT",apiUrl(apiBase,"/upload",{name:f.name,total:f.size}));xhr.upload.onprogress=e=>{const total=e.lengthComputable?e.total:f.size;const loaded=e.lengthComputable?e.loaded:0;qi.st.textContent=bytes(loaded)+" / "+bytes(total);qi.bar.style.width=(total?Math.round(loaded*100/total):100)+"%"};xhr.onload=()=>{let d={};try{d=xhr.responseText?JSON.parse(xhr.responseText):{}}catch(e){reject(new Error(xhr.responseText||xhr.statusText));return}if(xhr.status<200||xhr.status>=300||d.ok===false){reject(new Error(d.error||xhr.statusText));return}show("API "+apiBase,false);resolve(d)};xhr.onerror=()=>reject(new Error("上传失败"));xhr.send(f)})}
+async function uploadOne(f){const qi=qitem(f.name);qi.st.textContent="0 / "+bytes(f.size);const d=await uploadRaw(f,qi);if(!d.done)throw new Error("upload incomplete");qi.bar.style.width="100%";qi.st.textContent="完成"}
 async function uploadFiles(fs){const arr=Array.from(fs||[]);for(const f of arr){try{await uploadOne(f)}catch(e){show(e.message,true)}}await load()}
 function normEq(){eq=Object.assign(JSON.parse(JSON.stringify(EQ_DEFAULT)),eq||{});eq.eq=eq.eq||EQ_DEFAULT.eq.slice();return eq}
 function fillMainVolume(){normEq();if(!$("mainVolume"))return;$("mainVolume").value=eq.volume;$("mainVolumeVal").textContent=Number(eq.volume||0).toFixed(2)}
@@ -547,8 +561,14 @@ local function web_music_path(name)
   return APP.WEB_MUSIC_DIR .. "/" .. safe, safe
 end
 
-local function web_upload_temp_path(path)
-  return tostring(path or "") .. ".uploading"
+local function web_upload_temp_dir()
+  return APP.WEB_MUSIC_DIR .. "/.uploading"
+end
+
+local function web_upload_temp_path(name)
+  local safe, err = web_safe_name(name)
+  if not safe then return nil, err end
+  return web_upload_temp_dir() .. "/" .. safe .. ".tmp"
 end
 
 local function web_target_is_active_track(path, name)
@@ -569,6 +589,46 @@ local function web_ensure_music_dir()
   local st = file and file.stat and file.stat(APP.WEB_MUSIC_DIR)
   if st and st.is_dir then return true end
   return file and file.mkdir and file.mkdir(APP.WEB_MUSIC_DIR)
+end
+
+local function web_ensure_upload_dir()
+  if not web_ensure_music_dir() then return false, "mkdir failed" end
+  local dir = web_upload_temp_dir()
+  local st = file and file.stat and file.stat(dir)
+  if st and st.is_dir then return true end
+  if st then
+    file.remove(dir)
+    if file.stat(dir) then return false, "upload temp path exists" end
+  end
+  if not (file and file.mkdir and file.mkdir(dir)) then
+    return false, "upload temp mkdir failed"
+  end
+  return true
+end
+
+local function web_refresh_tracks(reason)
+  reason = tostring(reason or "web")
+  if S.playing or S.opening or S.in_tick or S.status == "PLAY" or S.status == "BUFFER" then
+    APP.needs_rescan = true
+    APP.rescan_reason = reason
+    feature_log("Track list refresh deferred:", reason)
+    return #APP.tracks
+  end
+  APP.tracks = scan_tracks()
+  APP.needs_rescan = false
+  APP.rescan_reason = nil
+  feature_log("Track list refreshed:", reason, tostring(#APP.tracks) .. " tracks")
+  return #APP.tracks
+end
+
+local function run_deferred_rescan(reason, force)
+  if not APP.needs_rescan then return false end
+  if not force and (S.playing or S.opening or S.in_tick) then return false end
+  local was_opening = S.opening
+  if force then S.opening = false end
+  web_refresh_tracks(reason or APP.rescan_reason or "deferred")
+  if force then S.opening = was_opening end
+  return true
 end
 
 local function web_list(req)
@@ -604,43 +664,103 @@ local function web_remove(req)
   if not st or st.is_dir then return web_err("404 Not Found", "file not found") end
   file.remove(path)
   if file.stat(path) then return web_err("500 Internal Server Error", "remove failed") end
-  APP.tracks = scan_tracks()
+  web_refresh_tracks("remove")
   return web_ok({ name = safe_or_err })
 end
 
-local function web_read_upload_body(req, offset, total)
-  local chunks = {}
+local function web_open_upload_temp(path, offset)
+  local fd
+  if offset == 0 then
+    if file.stat(path) then
+      file.remove(path)
+    end
+    fd = file.open(path, "w+")
+  else
+    local st = file.stat(path)
+    if not st or st.is_dir or (st.size or 0) ~= offset then
+      return nil, "upload offset mismatch"
+    end
+    fd = file.open(path, "a+")
+  end
+  if not fd then return nil, "open failed" end
+  return fd
+end
+
+local function web_upload_yield()
+  if APP.audio and APP.audio.yield then
+    local ok = pcall(APP.audio.yield)
+    if ok then return end
+  end
+  if tmr and tmr.wdclr then
+    pcall(tmr.wdclr)
+  end
+end
+
+local function web_prefetch_before_upload()
+  if not (S.playing and APP.audio and APP.audio.prefetch) then return end
+  local target = tonumber(APP.MP3_PREFETCH_UPLOAD_TARGET_BYTES) or (2 * 1024 * 1024)
+  local max_bytes = tonumber(APP.MP3_PREFETCH_UPLOAD_READ_BYTES) or target
+  local ok, cached, cap, eof = pcall(APP.audio.prefetch, target, max_bytes)
+  if ok then
+    feature_log(
+      "Upload prefetch:",
+      tostring(cached or 0) .. "/" .. tostring(cap or 0),
+      eof and "eof" or ""
+    )
+  else
+    web_log("upload prefetch failed", tostring(cached))
+  end
+end
+
+local function web_write_upload_body(req, fd, offset, total, progress_cb)
   local written = 0
+  local since_yield = 0
+  local write_limit = math.max(1024, tonumber(APP.WEB_UPLOAD_WRITE_BYTES) or (16 * 1024))
+  local yield_limit = math.max(write_limit, tonumber(APP.WEB_UPLOAD_YIELD_BYTES) or (64 * 1024))
   while true do
     local chunk = req.getbody()
     if not chunk then break end
-    if #chunk > 0 then
-      if offset + written + #chunk > total then
-        return nil, nil, "body exceeds total"
+    local n = #chunk
+    if n > 0 then
+      if offset + written + n > total then
+        return nil, "body exceeds total"
       end
-      chunks[#chunks + 1] = chunk
-      written = written + #chunk
+      local pos = 1
+      while pos <= n do
+        local take = math.min(write_limit, n - pos + 1)
+        local piece = (pos == 1 and take == n) and chunk or chunk:sub(pos, pos + take - 1)
+        local before = written
+        if not fd:write(piece) then
+          return nil, "write failed"
+        end
+        written = written + take
+        since_yield = since_yield + take
+        if progress_cb then
+          progress_cb(offset + before, offset + written)
+        end
+        pos = pos + take
+        if since_yield >= yield_limit then
+          since_yield = 0
+          web_upload_yield()
+        end
+      end
     end
   end
-  return chunks, written
+  if fd.flush then fd:flush() end
+  return written
 end
 
-local function web_write_upload_chunks(path, chunks, append)
-  local fd = file.open(path, append and "a+" or "w+")
-  if not fd then return false, "open failed" end
-  for _, chunk in ipairs(chunks or {}) do
-    if #chunk > 0 and not fd:write(chunk) then
-      fd:close()
-      return false, "write failed"
-    end
-  end
-  fd:close()
-  return true
-end
-
-local function web_finish_upload(tmp_path, final_path)
+local function web_finish_upload(tmp_path, final_path, total)
   if not file.rename then
     return false, "rename missing"
+  end
+  total = math.floor(tonumber(total) or -1)
+  local tmp_st = file.stat(tmp_path)
+  if not tmp_st or tmp_st.is_dir then
+    return false, "temp file missing"
+  end
+  if total < 0 or (tmp_st.size or 0) ~= total then
+    return false, "temp size mismatch"
   end
   local st = file.stat(final_path)
   if st and st.is_dir then
@@ -654,6 +774,10 @@ local function web_finish_upload(tmp_path, final_path)
   end
   if not file.rename(tmp_path, final_path) then
     return false, "rename failed"
+  end
+  local final_st = file.stat(final_path)
+  if not final_st or final_st.is_dir or (final_st.size or 0) ~= total then
+    return false, "final size mismatch"
   end
   return true
 end
@@ -707,41 +831,49 @@ local function web_upload(req)
   local q = web_parse_query(req and req.query)
   local path, safe_or_err = web_music_path(q.name or "")
   if not path then return web_err("400 Bad Request", safe_or_err) end
-  local tmp_path = web_upload_temp_path(path)
+  local tmp_path, tmp_err = web_upload_temp_path(safe_or_err)
+  if not tmp_path then return web_err("400 Bad Request", tmp_err) end
   local offset = math.floor(tonumber(q.offset) or 0)
   local total = math.floor(tonumber(q.total) or -1)
   if offset < 0 or total < 0 or offset > total then return web_err("400 Bad Request", "invalid offset") end
   if total > APP.WEB_MAX_FILE_SIZE then return web_err("413 Payload Too Large", "file too large") end
-  if not web_ensure_music_dir() then return web_err("500 Internal Server Error", "mkdir failed") end
+  local dir_ok, dir_err = web_ensure_upload_dir()
+  if not dir_ok then return web_err("500 Internal Server Error", dir_err) end
 
   if web_target_is_active_track(path, safe_or_err) then
     return web_err("409 Conflict", "target is active track")
   end
 
-  local chunks, written, read_err = web_read_upload_body(req, offset, total)
-  if not chunks then return web_err("400 Bad Request", read_err) end
-
   if offset == 0 then
-    if file.stat(tmp_path) then
-      file.remove(tmp_path)
-    end
-  else
-    local st = file.stat(tmp_path)
-    if not st or st.is_dir or (st.size or 0) ~= offset then
-      return web_err("409 Conflict", "upload offset mismatch")
-    end
+    web_prefetch_before_upload()
   end
 
-  local ok, write_err = web_write_upload_chunks(tmp_path, chunks, offset > 0)
-  if not ok then return web_err("500 Internal Server Error", write_err) end
+  local fd, open_err = web_open_upload_temp(tmp_path, offset)
+  if not fd then return web_err(open_err == "upload offset mismatch" and "409 Conflict" or "500 Internal Server Error", open_err) end
+
+  local written, write_err = web_write_upload_body(req, fd, offset, total, function(chunk_offset, chunk_next)
+    web_upload_log_progress(safe_or_err, chunk_offset, chunk_next, total)
+  end)
+  fd:close()
+  if not written then return web_err("400 Bad Request", write_err) end
   local next_offset = offset + written
-  web_upload_log_progress(safe_or_err, offset, next_offset, total)
-  if next_offset >= total then
-    local finish_ok, finish_err = web_finish_upload(tmp_path, path)
-    if not finish_ok then return web_err("500 Internal Server Error", finish_err) end
-    APP.tracks = scan_tracks()
+  if written == 0 then
+    web_upload_log_progress(safe_or_err, offset, next_offset, total)
   end
-  return web_ok({ name = safe_or_err, next_offset = next_offset, total = total, done = next_offset >= total })
+  if next_offset >= total then
+    local finish_ok, finish_err = web_finish_upload(tmp_path, path, total)
+    if not finish_ok then return web_err("500 Internal Server Error", finish_err) end
+    web_refresh_tracks("upload")
+  end
+  return web_ok({
+    name = safe_or_err,
+    temp_path = tmp_path,
+    path = path,
+    next_offset = next_offset,
+    total = total,
+    done = next_offset >= total,
+    tracks = APP.tracks and #APP.tracks or 0,
+  })
 end
 
 local function web_eq_table()
@@ -1452,20 +1584,30 @@ local function lyric_scroll_px(ms, distance)
 end
 
 local function start_i2s(rate, channels)
+  local profiles = APP.I2S_BUFFER_FALLBACKS or {
+    { count = APP.BUFFER_COUNT, len = APP.BUFFER_LEN },
+  }
+  local last_err = nil
   if APP.audio and APP.audio.i2s_start then
-    local ok, err = pcall(APP.audio.i2s_start, {
-      port = APP.I2S_ID,
-      sample_rate = rate,
-      channels = channels,
-      bits = APP.I2S_BITS,
-      buffer_count = APP.BUFFER_COUNT,
-      buffer_len = APP.BUFFER_LEN,
-      data_out_pin = APP.DATA_OUT_PIN,
-    })
-    if not ok then
-      error("audio.i2s_start failed: " .. tostring(err))
+    for _, profile in ipairs(profiles) do
+      local ok, started_or_err, start_err = pcall(APP.audio.i2s_start, {
+        port = APP.I2S_ID,
+        sample_rate = rate,
+        channels = channels,
+        bits = APP.I2S_BITS,
+        buffer_count = profile.count or APP.BUFFER_COUNT,
+        buffer_len = profile.len or APP.BUFFER_LEN,
+        data_out_pin = APP.DATA_OUT_PIN,
+      })
+      if ok and started_or_err then
+        if profile.count ~= APP.BUFFER_COUNT or profile.len ~= APP.BUFFER_LEN then
+          log("i2s dma fallback", tostring(profile.count) .. "x" .. tostring(profile.len))
+        end
+        return
+      end
+      last_err = ok and (start_err or started_or_err) or started_or_err
     end
-    return
+    error("audio.i2s_start failed: " .. tostring(last_err or "start rejected"))
   end
 
   if not i2s or not i2s.start then
@@ -1473,23 +1615,30 @@ local function start_i2s(rate, channels)
   end
 
   pcall(i2s.stop, APP.I2S_ID)
-  local channel = i2s.CHANNEL_ONLY_LEFT or i2s.CHANNEL_RIGHT_LEFT
-  if (tonumber(channels) or 1) > 1 then
-    channel = i2s.CHANNEL_RIGHT_LEFT or i2s.CHANNEL_ALL_LEFT or i2s.CHANNEL_ONLY_LEFT
+  for _, profile in ipairs(profiles) do
+    local channel = i2s.CHANNEL_ONLY_LEFT or i2s.CHANNEL_RIGHT_LEFT
+    if (tonumber(channels) or 1) > 1 then
+      channel = i2s.CHANNEL_RIGHT_LEFT or i2s.CHANNEL_ALL_LEFT or i2s.CHANNEL_ONLY_LEFT
+    end
+    local ok, err = pcall(i2s.start, APP.I2S_ID, {
+      mode = i2s.MODE_MASTER | i2s.MODE_TX,
+      rate = rate,
+      bits = APP.I2S_BITS,
+      channel = channel,
+      format = i2s.FORMAT_I2S,
+      buffer_count = profile.count or APP.BUFFER_COUNT,
+      buffer_len = profile.len or APP.BUFFER_LEN,
+      data_out_pin = APP.DATA_OUT_PIN,
+    })
+    if ok then
+      if profile.count ~= APP.BUFFER_COUNT or profile.len ~= APP.BUFFER_LEN then
+        log("i2s dma fallback", tostring(profile.count) .. "x" .. tostring(profile.len))
+      end
+      return
+    end
+    last_err = err
   end
-  local ok, err = pcall(i2s.start, APP.I2S_ID, {
-    mode = i2s.MODE_MASTER | i2s.MODE_TX,
-    rate = rate,
-    bits = APP.I2S_BITS,
-    channel = channel,
-    format = i2s.FORMAT_I2S,
-    buffer_count = APP.BUFFER_COUNT,
-    buffer_len = APP.BUFFER_LEN,
-    data_out_pin = APP.DATA_OUT_PIN,
-  })
-  if not ok then
-    error("i2s.start failed: " .. tostring(err))
-  end
+  error("i2s.start failed: " .. tostring(last_err))
 end
 
 local function start_native_i2s_play()
@@ -1498,6 +1647,8 @@ local function start_native_i2s_play()
   end
   S.play_task_base_pcm_bytes = tonumber(S.pcm_bytes) or 0
   S.play_task_last_written_bytes = 0
+  S.play_task_last_progress_ms = now_ms()
+  S.play_task_stall_logged_ms = 0
   local ok, started_or_err, start_err = pcall(APP.audio.i2s_play_start, {
     chunk_bytes = APP.PLAY_TASK_CHUNK_BYTES,
     timeout_ms = APP.PLAY_TASK_TIMEOUT_MS,
@@ -1713,6 +1864,7 @@ local function open_track(index, autoplay)
   if S.opening then return end
   S.opening = true
   close_audio()
+  run_deferred_rescan("open", true)
 
   local n = #APP.tracks
   if n <= 0 then
@@ -1748,6 +1900,8 @@ local function open_track(index, autoplay)
     S.pcm_bytes = 0
     S.play_task_base_pcm_bytes = 0
     S.play_task_last_written_bytes = 0
+    S.play_task_last_progress_ms = now_ms()
+    S.play_task_stall_logged_ms = 0
     S.lyric_idx = 1
     S.error = ""
     S.buffering = false
@@ -1789,6 +1943,7 @@ local function pause_track()
   if not pause_native_i2s(true) then
     stop_i2s()
   end
+  run_deferred_rescan("pause")
   feature_log("Playback paused:", tostring(current_track() and (current_track().title or current_track().name) or "unknown"))
 end
 
@@ -1847,7 +2002,10 @@ local function play_tick()
     APP.stop("exit")
     return
   end
-  if not S.playing or not APP.audio then return end
+  if not S.playing or not APP.audio then
+    run_deferred_rescan("idle")
+    return
+  end
 
   local tick_start = APP.PROFILE_AUDIO and profile_now_us() or 0
   S.in_tick = true
@@ -1872,6 +2030,26 @@ local function play_tick()
     end
     sync_native_buffering(st)
     local written = tonumber(st.written_bytes) or tonumber(S.play_task_last_written_bytes) or 0
+    local prev_written = tonumber(S.play_task_last_written_bytes) or 0
+    local progress_now = now_ms()
+    if written > prev_written then
+      S.play_task_last_progress_ms = progress_now
+      S.play_task_stall_logged_ms = 0
+    elseif tonumber(st.running) == 1 and tonumber(st.paused) ~= 1 and tonumber(st.eof) ~= 1 and not S.buffering then
+      local last_progress = tonumber(S.play_task_last_progress_ms) or progress_now
+      local stalled_ms = math.max(0, progress_now - last_progress)
+      local last_log = tonumber(S.play_task_stall_logged_ms) or 0
+      if stalled_ms >= 300 and progress_now - last_log >= 1000 then
+        S.play_task_stall_logged_ms = progress_now
+        log(
+          "audio i2s stall:",
+          tostring(stalled_ms) .. "ms",
+          "pcmb=" .. tostring(st.pcm_buffer_bytes or 0) .. "/" .. tostring(st.pcm_buffer_capacity or 0),
+          "pending=" .. tostring(st.pending_bytes or 0),
+          "iter=" .. tostring(st.iterations or 0)
+        )
+      end
+    end
     S.play_task_last_written_bytes = written
     S.pcm_bytes = (tonumber(S.play_task_base_pcm_bytes) or 0) + written
     if tonumber(st.error) == 1 then
