@@ -13,7 +13,7 @@ NIXIE_CLOCK_APP = {
   ASSET_DIR = "/sd/apps/NixieClock/assets",
   TIMEZONE = "CST-8",
   TZ_OFFSET_SEC = 8 * 3600,
-  NTP_SERVER = "pool.ntp.org",
+  NTP_SERVER = "ntp.aliyun.com",
   SYNC_RETRY_MS = 30000,
 
   DIGIT_W = 52,
