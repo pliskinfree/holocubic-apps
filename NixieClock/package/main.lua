@@ -6,7 +6,7 @@ if prev and prev.stop then
 end
 
 NIXIE_CLOCK_APP = {
-  VERSION = "2026-04-27-nixie-clock-v1",
+  VERSION = "2026-07-04-nixie-clock-v2",
 
   SCREEN_W = 320,
   SCREEN_H = 240,

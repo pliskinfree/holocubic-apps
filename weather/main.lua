@@ -3,7 +3,7 @@
     end
 
     WEATHER_APP = {
-    VERSION = "2026-05-09-weather-cubicserver-v1",
+    VERSION = "2026-07-04-weather-cubicserver-v2",
     DEBUG = false,
 
     SCREEN_W = 320,
@@ -21,7 +21,7 @@
 
     TZ_OFFSET_SEC = 0,
     TIMEZONE = "UTC0",
-    NTP_SERVER = "pool.ntp.org",
+    NTP_SERVER = "ntp.aliyun.com",
     CITY_NAME = "Weather",
 
     ASSET_DIR = "/sd/apps/weather/assets",

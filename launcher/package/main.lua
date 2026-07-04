@@ -9,6 +9,7 @@ local LABEL_H = 16
 local LEFT_X = -45
 local CENTER_X = math.floor((SCREEN_W - ICON_SIZE) / 2)
 local RIGHT_X = SCREEN_W - 45
+local NTP_SERVER = "ntp.aliyun.com"
 local OFFSCREEN_LEFT_X = -125
 local OFFSCREEN_RIGHT_X = SCREEN_W + 45
 local ANIM_MS = 360
@@ -57,6 +58,16 @@ local function safe_set_hidden(id, hidden)
     else
       lv_obj_clear_flag(id, LV_OBJ_FLAG_HIDDEN)
     end
+  end)
+end
+
+local function sync_ntp_once()
+  local time_mod = rawget(_G, "time")
+  if not time_mod or not time_mod.initntp then
+    return
+  end
+  pcall(function()
+    time_mod.initntp(NTP_SERVER)
   end)
 end
 
@@ -585,6 +596,7 @@ end
 
 build_ui()
 load_apps(0)
+sync_ntp_once()
 
 key.on(key.LEFT, function(evt_type, ts_ms)
   if evt_type == key.START then
