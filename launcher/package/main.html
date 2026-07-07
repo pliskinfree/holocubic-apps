@@ -3687,6 +3687,8 @@ function initAppManageView(){
   const detailCloseBtn = root.querySelector("#storeDetailCloseBtn");
   const detailRetryBtn = root.querySelector("#storeDetailRetryBtn");
   const detailOpenLink = root.querySelector("#storeDetailOpenLink");
+  const LAUNCHER_APP_ID = "launcher";
+  const LAUNCHER_APP_INFO_PATH = "/sd/apps/launcher/app.info";
   const themeClasses = [
     "store-theme-green",
     "store-theme-blue",
@@ -3703,6 +3705,11 @@ function initAppManageView(){
   let detailLoadTimer = 0;
   let detailActiveTrigger = null;
   let detailBodyOverflow = "";
+  let launcherInstallProbe = {
+    status: "unknown",
+    info: null,
+    promise: null
+  };
 
   function normalizeDescriptionFields(source){
     const raw = source && typeof source === "object" ? source : {};
@@ -3760,6 +3767,49 @@ function initAppManageView(){
       }
     });
     return out;
+  }
+
+  function launcherInstalledInfoFromAppInfo(info, existingInfo){
+    const existing = existingInfo && typeof existingInfo === "object" ? existingInfo : {};
+    const descriptionFields = appInfoDescriptionFields(info || {});
+    return Object.assign({}, existing, {
+      id: LAUNCHER_APP_ID,
+      app_id: LAUNCHER_APP_ID,
+      name: String((info && info.name) || existing.name || "Launcher"),
+      version: String((info && (info.version || info.app_version)) || existing.version || existing.app_version || ""),
+      app_version: String((info && (info.app_version || info.version)) || existing.app_version || existing.version || ""),
+      kind: "launcher",
+      source: existing.source || "sd",
+      description: descriptionFields.text || existing.description || "",
+      description_zh: descriptionFields.zh || existing.description_zh || "",
+      description_en: descriptionFields.en || existing.description_en || "",
+      installed_by_app_info: true
+    });
+  }
+
+  async function refreshLauncherInstallProbe(force){
+    if(launcherInstallProbe.promise){
+      return launcherInstallProbe.promise;
+    }
+    if(!force && launcherInstallProbe.status !== "unknown"){
+      return launcherInstallProbe.info;
+    }
+    launcherInstallProbe.promise = readDevtoolsTextFile(LAUNCHER_APP_INFO_PATH, 65536)
+      .then((text) => {
+        const info = parseAppInfoText(text);
+        launcherInstallProbe.status = "installed";
+        launcherInstallProbe.info = launcherInstalledInfoFromAppInfo(info, launcherInstallProbe.info);
+        return launcherInstallProbe.info;
+      })
+      .catch(() => {
+        launcherInstallProbe.status = "missing";
+        launcherInstallProbe.info = null;
+        return null;
+      })
+      .finally(() => {
+        launcherInstallProbe.promise = null;
+      });
+    return launcherInstallProbe.promise;
   }
 
   function appInfoDescriptionFields(info){
@@ -3860,6 +3910,12 @@ function initAppManageView(){
         map.set(id, item);
       }
     });
+    if(launcherInstallProbe.status === "installed" && launcherInstallProbe.info){
+      map.set(
+        LAUNCHER_APP_ID,
+        launcherInstalledInfoFromAppInfo(launcherInstallProbe.info, map.get(LAUNCHER_APP_ID))
+      );
+    }
     return map;
   }
 
@@ -4370,6 +4426,33 @@ function initAppManageView(){
     if(!grid){
       return;
     }
+    if(launcherInstallProbe.status === "unknown" && !launcherInstallProbe.promise){
+      refreshLauncherInstallProbe(false).then(() => {
+        if(currentView === "appmanage"){
+          if(storeCatalog.length){
+            const installedMap = currentInstalledMap();
+            storeCatalog = storeCatalog.map((item) => {
+              if(String(item && item.id || "") !== LAUNCHER_APP_ID){
+                return item;
+              }
+              const installedInfo = installedMap.get(LAUNCHER_APP_ID) || null;
+              if(!installedInfo){
+                return Object.assign({}, item, { installed: false, installedInfo: null });
+              }
+              return Object.assign({}, item, {
+                name: item.name || installedInfo.name || "Launcher",
+                kind: "launcher",
+                installed: true,
+                installedInfo
+              });
+            });
+            renderStoreApps();
+          }else{
+            updateStoreInstallButtons(latestSystemState);
+          }
+        }
+      });
+    }
     const state = data || latestSystemState;
     const install = state && state.app_install;
     const maxParallel = Math.max(1, Number(install && install.max_parallel || 3));
@@ -4610,6 +4693,7 @@ function initAppManageView(){
       if(!latestSystemState){
         await loadState(true);
       }
+      await refreshLauncherInstallProbe(true);
       const installedMap = currentInstalledMap();
       storeCatalog = localOnlyStoreItems(installedMap, new Set());
       setStoreStatus("使用默认应用目录，点击“刷新目录”。", false);
@@ -4623,6 +4707,7 @@ function initAppManageView(){
       if(!latestSystemState){
         await loadState(true);
       }
+      await refreshLauncherInstallProbe(true);
       const data = await api(
         "/api/system/apps/catalog?server=" + encodeURIComponent(server) +
         "&channel=" + encodeURIComponent(DEFAULT_APP_STORE_CHANNEL)
@@ -4645,6 +4730,7 @@ function initAppManageView(){
       renderStoreApps();
       return data;
     }catch(err){
+      await refreshLauncherInstallProbe(true);
       const installedMap = currentInstalledMap();
       storeCatalog = localOnlyStoreItems(installedMap, new Set());
       renderStoreApps();
