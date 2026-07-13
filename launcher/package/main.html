@@ -537,6 +537,11 @@ button,input,select,textarea{font:inherit;color:inherit}
 .app-note{font-size:13px}
 .app-meta{justify-content:flex-end}
 .field{display:grid;gap:8px}
+.field small{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.45;
+}
 .field input,.field select,.wifi-input{
   width:100%;
   min-height:44px;
@@ -2640,6 +2645,14 @@ button,input,select,textarea{font:inherit;color:inherit}
                   <option value="zh-TW">繁體中文</option>
                 </select>
               </label>
+              <label class="field" for="apEnabledSelect">
+                <span>无线热点（AP）</span>
+                <select id="apEnabledSelect" name="apEnabled">
+                  <option value="true">保持开启</option>
+                  <option value="false">有网络时关闭</option>
+                </select>
+                <small>下次启动 Launcher 时生效；关闭偏好下等待约 5 秒，无 IP 会恢复热点。</small>
+              </label>
             </div>
             <span class="visually-hidden" id="settingsRoute">/main</span>
             <div class="settings-actions">
@@ -2883,6 +2896,7 @@ const qs = (sel) => document.querySelector(sel);
 const DEFAULT_MDNS = "-";
 const DEFAULT_TIMEZONE = "CST-8";
 const DEFAULT_LANGUAGE = "zh-CN";
+const DEFAULT_AP_ENABLED = true;
 const DEFAULT_APP_STORE_CHANNEL = "stable";
 const DEFAULT_APP_STORE_HOST_CODES = [99,117,98,105,99,46,99,108,111,99,116,101,99,107,46,99,111,109];
 const DEFAULT_APP_STORE_URL = "https://" + DEFAULT_APP_STORE_HOST_CODES.map((code) => String.fromCharCode(code)).join("");
@@ -2897,6 +2911,7 @@ const STORAGE_KEYS = {
   timezone: "cubic.mainpage.timezone",
   weatherAddress: "cubic.mainpage.weatherAddress",
   language: "cubic.mainpage.language",
+  apEnabled: "cubic.mainpage.apEnabled",
   appStoreUrl: "cubic.mainpage.appStoreUrl"
 };
 let toastTimer = 0;
@@ -2965,6 +2980,10 @@ const I18N_ROWS = [
   ["时区", "Time zone", "タイムゾーン", "時區"],
   ["天气地址", "Weather location", "天気の場所", "天氣地點"],
   ["界面语言", "Interface language", "表示言語", "介面語言"],
+  ["无线热点（AP）", "Wireless hotspot (AP)", "無線アクセスポイント (AP)", "無線熱點（AP）"],
+  ["保持开启", "Keep enabled", "常に有効", "保持開啟"],
+  ["有网络时关闭", "Disable when online", "オンライン時は無効", "有網路時關閉"],
+  ["下次启动 Launcher 时生效；关闭偏好下等待约 5 秒，无 IP 会恢复热点。", "Takes effect the next time Launcher starts; when disabled, it waits about 5 seconds and restores the hotspot if no IP is available.", "次回 Launcher 起動時に反映されます。無効時は約5秒待機し、IPを取得できなければアクセスポイントを復元します。", "下次啟動 Launcher 時生效；設為關閉時會等待約 5 秒，若沒有 IP，便恢復熱點。"],
   ["简体中文", "Simplified Chinese", "簡体字中国語", "簡體中文"],
   ["保存", "Save", "保存", "儲存"],
   ["保存中...", "Saving...", "保存中...", "儲存中..."],
@@ -3377,14 +3396,25 @@ function ensureTimezoneOption(value){
   select.appendChild(option);
 }
 
+function normalizeApEnabled(value, fallback){
+  if(typeof value === "boolean") return value;
+  if(typeof value === "number") return value !== 0;
+  const text = String(value == null ? "" : value).trim().toLowerCase();
+  if(["true", "1", "on", "enabled"].includes(text)) return true;
+  if(["false", "0", "off", "disabled"].includes(text)) return false;
+  return fallback !== false;
+}
+
 function loadStoredSettings(){
   const timezone = storageGet(STORAGE_KEYS.timezone, DEFAULT_TIMEZONE);
   const weatherAddress = storageGet(STORAGE_KEYS.weatherAddress, "");
   const language = normalizeLanguage(storageGet(STORAGE_KEYS.language, DEFAULT_LANGUAGE));
+  const apEnabled = normalizeApEnabled(storageGet(STORAGE_KEYS.apEnabled, DEFAULT_AP_ENABLED), DEFAULT_AP_ENABLED);
   ensureTimezoneOption(timezone);
   qs("#timezoneSelect").value = timezone;
   qs("#weatherAddress").value = weatherAddress;
   qs("#languageSelect").value = language;
+  qs("#apEnabledSelect").value = apEnabled ? "true" : "false";
   applyLanguage(language, false);
 }
 
@@ -3396,13 +3426,16 @@ async function loadDeviceSettings(){
     const timezone = String(doc.timezone || DEFAULT_TIMEZONE);
     const weatherAddress = String(doc.weather_address || doc.weatherAddress || "");
     const language = normalizeLanguage(doc.language || doc.locale || doc.lang || DEFAULT_LANGUAGE);
+    const apEnabled = normalizeApEnabled(doc.ap_enabled, DEFAULT_AP_ENABLED);
     ensureTimezoneOption(timezone);
     qs("#timezoneSelect").value = timezone;
     qs("#weatherAddress").value = weatherAddress;
     qs("#languageSelect").value = language;
+    qs("#apEnabledSelect").value = apEnabled ? "true" : "false";
     storageSet(STORAGE_KEYS.timezone, timezone);
     storageSet(STORAGE_KEYS.weatherAddress, weatherAddress);
     storageSet(STORAGE_KEYS.language, language);
+    storageSet(STORAGE_KEYS.apEnabled, apEnabled ? "true" : "false");
     applyLanguage(language, false);
     return doc;
   }catch(err){
@@ -6365,6 +6398,7 @@ function currentSettingsPayload(){
     timezone: qs("#timezoneSelect").value || DEFAULT_TIMEZONE,
     weather_address: weatherAddress,
     language: normalizeLanguage(qs("#languageSelect").value),
+    ap_enabled: qs("#apEnabledSelect").value !== "false",
     saved_at: new Date().toISOString()
   });
   if(weatherAddress !== previousAddress){
@@ -6384,6 +6418,7 @@ async function saveSettings(ev){
   storageSet(STORAGE_KEYS.timezone, payload.timezone);
   storageSet(STORAGE_KEYS.weatherAddress, payload.weather_address);
   storageSet(STORAGE_KEYS.language, payload.language);
+  storageSet(STORAGE_KEYS.apEnabled, payload.ap_enabled ? "true" : "false");
   applyLanguage(payload.language, false);
   button.disabled = true;
   button.textContent = "保存中...";
@@ -6403,6 +6438,7 @@ async function resetSettings(){
   storageRemove(STORAGE_KEYS.timezone);
   storageRemove(STORAGE_KEYS.weatherAddress);
   storageRemove(STORAGE_KEYS.language);
+  storageRemove(STORAGE_KEYS.apEnabled);
   loadStoredSettings();
   const button = qs("#resetSettings");
   const prevText = button.textContent;

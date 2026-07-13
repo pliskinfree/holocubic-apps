@@ -16,6 +16,9 @@ local ANIM_MS = 360
 
 local SETTINGS_PATH = "/sd/apps/settings.json"
 local DEFAULT_LANGUAGE = "zh-CN"
+local AP_POLICY_START_DELAY_MS = 750
+local AP_IP_WAIT_MS = 5000
+local AP_POLICY_POLL_MS = 250
 
 local function normalize_language(value)
   local text = tostring(value or ""):gsub("_", "-")
@@ -25,18 +28,29 @@ local function normalize_language(value)
   return DEFAULT_LANGUAGE
 end
 
-local function read_language()
-  if not file or not file.getcontents then return DEFAULT_LANGUAGE end
+local function read_settings()
+  if not file or not file.getcontents then return {} end
   local ok, raw = pcall(function() return file.getcontents(SETTINGS_PATH) end)
-  if not ok or type(raw) ~= "string" or raw == "" then return DEFAULT_LANGUAGE end
+  if not ok or type(raw) ~= "string" or raw == "" then return {} end
   local codec = rawget(_G, "json") or rawget(_G, "sjson")
-  if not codec or not codec.decode then return DEFAULT_LANGUAGE end
+  if not codec or not codec.decode then return {} end
   local decoded, doc = pcall(function() return codec.decode(raw) end)
-  if not decoded or type(doc) ~= "table" then return DEFAULT_LANGUAGE end
-  return normalize_language(doc.language or doc.locale or doc.lang)
+  if not decoded or type(doc) ~= "table" then return {} end
+  return doc
 end
 
-local LANGUAGE = read_language()
+local function setting_bool(value, fallback)
+  if type(value) == "boolean" then return value end
+  if type(value) == "number" then return value ~= 0 end
+  local text = tostring(value or ""):lower()
+  if text == "true" or text == "1" or text == "on" or text == "enabled" then return true end
+  if text == "false" or text == "0" or text == "off" or text == "disabled" then return false end
+  return fallback
+end
+
+local SETTINGS = read_settings()
+local LANGUAGE = normalize_language(SETTINGS.language or SETTINGS.locale or SETTINGS.lang)
+local AP_PREFERRED_ENABLED = setting_bool(SETTINGS.ap_enabled, true)
 local UI_TEXT = {
   ["zh-CN"] = { no_apps = "暂无应用", loading = "正在启动" },
   en = { no_apps = "NO APPS", loading = "Starting" },
@@ -95,6 +109,7 @@ local STATE = {
   index = 1,
   reload_timer = nil,
   anim_timer = nil,
+  ap_policy_timer = nil,
   animating = false,
   repeat_left = 0,
   repeat_right = 0,
@@ -433,6 +448,86 @@ local function stop_timer(timer_ref_name)
   STATE[timer_ref_name] = nil
 end
 
+local function set_wifi_mode(mode)
+  if not wifi or not wifi.mode or mode == nil then
+    return false
+  end
+  local ok, err = pcall(function()
+    wifi.mode(mode, false)
+  end)
+  if not ok then
+    print("[launcher] set wifi mode failed:", tostring(err))
+  end
+  return ok
+end
+
+local function station_ip()
+  if not wifi or not wifi.sta or not wifi.sta.getip then
+    return nil
+  end
+  local ok, ip = pcall(function()
+    return wifi.sta.getip()
+  end)
+  if ok and type(ip) == "string" and ip ~= "" then
+    return ip
+  end
+  return nil
+end
+
+-- 固件会先短暂启动 AP+STA；launcher 稍后按用户偏好关闭 AP，
+-- 若纯 STA 在约 5 秒内仍未获得 IP，则恢复 AP 作为救援入口。
+local function start_ap_policy()
+  if not tmr or not tmr.create or not wifi then
+    return
+  end
+
+  stop_timer("ap_policy_timer")
+  local startup_wait_ms = 0
+  local ip_wait_ms = 0
+  local policy_started = false
+  local t = tmr.create()
+  STATE.ap_policy_timer = t
+  t:alarm(AP_POLICY_POLL_MS, tmr.ALARM_AUTO, function(self)
+    if not policy_started then
+      startup_wait_ms = startup_wait_ms + AP_POLICY_POLL_MS
+      if startup_wait_ms < AP_POLICY_START_DELAY_MS then
+        return
+      end
+      policy_started = true
+
+      if AP_PREFERRED_ENABLED then
+        set_wifi_mode(wifi.STATIONAP)
+        stop_timer("ap_policy_timer")
+        return
+      end
+
+      if station_ip() then
+        set_wifi_mode(wifi.STATION)
+        stop_timer("ap_policy_timer")
+        return
+      end
+
+      set_wifi_mode(wifi.STATION)
+      return
+    end
+
+    if station_ip() then
+      set_wifi_mode(wifi.STATION)
+      stop_timer("ap_policy_timer")
+      return
+    end
+
+    ip_wait_ms = ip_wait_ms + AP_POLICY_POLL_MS
+    if ip_wait_ms >= AP_IP_WAIT_MS then
+      set_wifi_mode(wifi.STATIONAP)
+      stop_timer("ap_policy_timer")
+    else
+      -- 网络初始化任务若稍晚写回 AP+STA，本轮会再次收敛到纯 STA。
+      set_wifi_mode(wifi.STATION)
+    end
+  end)
+end
+
 local function schedule_anim_done()
   stop_timer("anim_timer")
   STATE.animating = true
@@ -608,6 +703,16 @@ local function launch_current()
     return
   end
 
+  -- 用户在启动判定完成前进入应用时，优先保留可恢复的网络入口。
+  if STATE.ap_policy_timer then
+    if AP_PREFERRED_ENABLED or not station_ip() then
+      set_wifi_mode(wifi.STATIONAP)
+    else
+      set_wifi_mode(wifi.STATION)
+    end
+    stop_timer("ap_policy_timer")
+  end
+
   local ok, err = app.launch(item.id)
   if not ok then
     print("launch failed:", text_or(err, "unknown"))
@@ -670,6 +775,7 @@ end
 build_ui()
 load_apps(0)
 sync_ntp_once()
+start_ap_policy()
 
 key.on(key.LEFT, function(evt_type, ts_ms)
   if evt_type == key.START then
