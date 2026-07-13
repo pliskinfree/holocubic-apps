@@ -6,7 +6,7 @@ if prev and prev.stop then
 end
 
 FLUID_PENDANT_APP = {
-  VERSION = "2026-05-01-fluid-viper-batch-edge-v1"
+  VERSION = "2026-07-13-dst-timezone-v1"
 }
 
 local APP = FLUID_PENDANT_APP
@@ -44,6 +44,10 @@ local tmr_now_fn = runtime_tmr and runtime_tmr.now or nil
 local millis_fn = rawget(_G, "millis")
 local runtime_time = rawget(_G, "time")
 local time_getlocal_fn = runtime_time and runtime_time.getlocal or nil
+local time_settimezone_fn = runtime_time and runtime_time.settimezone or nil
+
+local SETTINGS_PATH = "/sd/apps/settings.json"
+local DEFAULT_TIMEZONE = "CST-8"
 
 if not lv_scr_act or not lv_obj_clean or not lv_canvas_create_fn then
   return
@@ -981,6 +985,40 @@ local function profile_draw(total_us, api_us, end_us)
     profile_state.draw_end_us = 0
     profile_state.draw_walk_us = 0
     profile_state.draw_frames = 0
+  end
+end
+
+local function read_timezone()
+  local runtime_file = rawget(_G, "file")
+  if not runtime_file or not runtime_file.getcontents then
+    return DEFAULT_TIMEZONE
+  end
+
+  local ok, raw = pcall_fn(runtime_file.getcontents, SETTINGS_PATH)
+  if not ok or type(raw) ~= "string" or raw == "" then
+    return DEFAULT_TIMEZONE
+  end
+
+  local codec = rawget(_G, "json") or rawget(_G, "sjson")
+  if not codec or not codec.decode then
+    return DEFAULT_TIMEZONE
+  end
+
+  local decoded, settings = pcall_fn(codec.decode, raw)
+  if not decoded or type(settings) ~= "table" or type(settings.timezone) ~= "string" then
+    return DEFAULT_TIMEZONE
+  end
+
+  local timezone = settings.timezone:match("^%s*(.-)%s*$") or ""
+  if timezone == "" then
+    return DEFAULT_TIMEZONE
+  end
+  return timezone
+end
+
+local function init_time_module()
+  if time_settimezone_fn then
+    pcall_fn(time_settimezone_fn, read_timezone())
   end
 end
 
@@ -2064,6 +2102,7 @@ else
 end
 build_display_lookup()
 init_root()
+init_time_module()
 
 if init_canvas() then
   detect_rect_mode()
