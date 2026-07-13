@@ -2631,6 +2631,15 @@ button,input,select,textarea{font:inherit;color:inherit}
                 <span>天气地址</span>
                 <input id="weatherAddress" name="weatherAddress" type="text" placeholder="Shanghai / Tokyo">
               </label>
+              <label class="field" for="languageSelect">
+                <span>界面语言</span>
+                <select id="languageSelect" name="language">
+                  <option value="zh-CN">简体中文</option>
+                  <option value="en">English</option>
+                  <option value="ja">日本語</option>
+                  <option value="zh-TW">繁體中文</option>
+                </select>
+              </label>
             </div>
             <span class="visually-hidden" id="settingsRoute">/main</span>
             <div class="settings-actions">
@@ -2873,6 +2882,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 const qs = (sel) => document.querySelector(sel);
 const DEFAULT_MDNS = "-";
 const DEFAULT_TIMEZONE = "CST-8";
+const DEFAULT_LANGUAGE = "zh-CN";
 const DEFAULT_APP_STORE_CHANNEL = "stable";
 const DEFAULT_APP_STORE_HOST_CODES = [99,117,98,105,99,46,99,108,111,99,116,101,99,107,46,99,111,109];
 const DEFAULT_APP_STORE_URL = "https://" + DEFAULT_APP_STORE_HOST_CODES.map((code) => String.fromCharCode(code)).join("");
@@ -2886,10 +2896,12 @@ const MEDIA_UPLOAD_MAX_HEIGHT = 240;
 const STORAGE_KEYS = {
   timezone: "cubic.mainpage.timezone",
   weatherAddress: "cubic.mainpage.weatherAddress",
+  language: "cubic.mainpage.language",
   appStoreUrl: "cubic.mainpage.appStoreUrl"
 };
 let toastTimer = 0;
 let latestSystemState = null;
+let latestDeviceSettings = {};
 let wifiScanRequested = false;
 let selectedWifiSsid = "";
 let currentView = "start";
@@ -2912,6 +2924,262 @@ let firmwareCheckBusy = false;
 let firmwareUpdateBusy = false;
 let wifiSuccessNoticeKey = "";
 let wifiSuccessRedirectTimer = 0;
+
+const I18N_ROWS = [
+  ["WiFi 配置", "WiFi Setup", "WiFi 設定", "WiFi 設定"],
+  ["请选择热点并输入密码", "Select a network and enter its password", "ネットワークを選び、パスワードを入力してください", "請選擇網路並輸入密碼"],
+  ["选择热点", "Network", "ネットワーク", "選擇網路"],
+  ["等待扫描附近热点", "Waiting for nearby networks", "周辺ネットワークを検索しています", "等待掃描附近網路"],
+  ["附近热点", "Nearby networks", "周辺ネットワーク", "附近網路"],
+  ["扫描", "Scan", "検索", "掃描"],
+  ["输入密码", "Enter password", "パスワードを入力", "輸入密碼"],
+  ["显示密码", "Show password", "パスワードを表示", "顯示密碼"],
+  ["隐藏密码", "Hide password", "パスワードを隠す", "隱藏密碼"],
+  ["连接", "Connect", "接続", "連線"],
+  ["跳过", "Skip", "スキップ", "略過"],
+  ["设备控制面板", "Device Dashboard", "デバイス管理", "裝置控制台"],
+  ["返回启动器", "Back to Launcher", "ランチャーへ戻る", "返回啟動器"],
+  ["当前使用", "Current", "現在", "目前使用"],
+  ["启动器", "Launcher", "ランチャー", "啟動器"],
+  ["运行状态", "Status", "動作状態", "執行狀態"],
+  ["可用应用", "Available apps", "利用可能なアプリ", "可用應用程式"],
+  ["当前页面", "Current page", "現在のページ", "目前頁面"],
+  ["主页面", "Main page", "メインページ", "主頁面"],
+  ["应用", "Apps", "アプリ", "應用程式"],
+  ["设备应用", "Device apps", "デバイスアプリ", "裝置應用程式"],
+  ["应用管理", "Manage apps", "アプリ管理", "應用程式管理"],
+  ["服务", "Services", "サービス", "服務"],
+  ["设备服务", "Device services", "デバイスサービス", "裝置服務"],
+  ["管理", "Manage", "管理", "管理"],
+  ["网络", "Network", "ネットワーク", "網路"],
+  ["连接状态", "Connection", "接続状態", "連線狀態"],
+  ["检测中", "Checking", "確認中", "檢查中"],
+  ["回到配网", "WiFi setup", "WiFi 設定へ", "返回配網"],
+  ["网络状态", "Network status", "ネットワーク状態", "網路狀態"],
+  ["访问地址", "Access address", "アクセスアドレス", "存取位址"],
+  ["已连接 WiFi", "Connected WiFi", "接続中の WiFi", "已連線 WiFi"],
+  ["在线", "Online", "オンライン", "線上"],
+  ["设置", "Settings", "設定", "設定"],
+  ["常用设置", "General settings", "一般設定", "常用設定"],
+  ["保存到设备", "Saved on device", "デバイスに保存", "儲存到裝置"],
+  ["时区", "Time zone", "タイムゾーン", "時區"],
+  ["天气地址", "Weather location", "天気の場所", "天氣地點"],
+  ["界面语言", "Interface language", "表示言語", "介面語言"],
+  ["简体中文", "Simplified Chinese", "簡体字中国語", "簡體中文"],
+  ["保存", "Save", "保存", "儲存"],
+  ["保存中...", "Saving...", "保存中...", "儲存中..."],
+  ["恢复默认", "Restore defaults", "初期設定に戻す", "恢復預設值"],
+  ["恢复中...", "Restoring...", "復元中...", "恢復中..."],
+  ["资源", "Media", "リソース", "資源"],
+  ["图像资源", "Image resources", "画像リソース", "圖像資源"],
+  ["进入管理", "Manage", "管理画面へ", "進入管理"],
+  ["静态图片", "Images", "画像", "靜態圖片"],
+  ["GIF 动画", "GIF animations", "GIF アニメーション", "GIF 動畫"],
+  ["系统", "System", "システム", "系統"],
+  ["系统更新", "System update", "システム更新", "系統更新"],
+  ["当前版本", "Current version", "現在のバージョン", "目前版本"],
+  ["最新版本", "Latest version", "最新バージョン", "最新版本"],
+  ["等待检查更新。", "Waiting to check for updates.", "更新確認を待っています。", "等待檢查更新。"],
+  ["检查更新", "Check for updates", "更新を確認", "檢查更新"],
+  ["安装更新", "Install update", "更新をインストール", "安裝更新"],
+  ["应用商店", "App Store", "アプリストア", "應用程式商店"],
+  ["刷新目录", "Refresh catalog", "カタログを更新", "重新整理目錄"],
+  ["高级选项", "Advanced", "詳細設定", "進階選項"],
+  ["应用目录地址", "App catalog URL", "アプリカタログ URL", "應用程式目錄位址"],
+  ["默认", "Default", "既定", "預設"],
+  ["当前目录", "Current catalog", "現在のカタログ", "目前目錄"],
+  ["使用默认地址", "Use default URL", "既定 URL を使用", "使用預設位址"],
+  ["默认地址已内置；需要私有目录时填写自己的服务器地址。", "The default URL is built in. Enter your server URL for a private catalog.", "既定 URL は内蔵されています。プライベートカタログではサーバー URL を入力してください。", "預設位址已內建；需要私人目錄時請填寫伺服器位址。"],
+  ["设备安装", "Device install", "デバイスへインストール", "裝置安裝"],
+  ["安装应用和服务", "Install apps and services", "アプリとサービスをインストール", "安裝應用程式與服務"],
+  ["使用默认应用目录刷新列表，选择需要的应用即可安装或卸载。", "Refresh the default catalog, then install or remove the apps you need.", "既定カタログを更新し、必要なアプリをインストールまたは削除します。", "重新整理預設應用程式目錄，即可安裝或解除安裝需要的項目。"],
+  ["目录状态", "Catalog status", "カタログ状態", "目錄狀態"],
+  ["使用默认应用目录，点击“刷新目录”。", "Using the default catalog. Select “Refresh catalog”.", "既定カタログを使用中です。「カタログを更新」を選択してください。", "使用預設應用程式目錄，請按「重新整理目錄」。"],
+  ["应用分类", "App categories", "アプリ分類", "應用程式分類"],
+  ["全部", "All", "すべて", "全部"],
+  ["已安装", "Installed", "インストール済み", "已安裝"],
+  ["可安装", "Available", "インストール可能", "可安裝"],
+  ["天气", "Weather", "天気", "天氣"],
+  ["时间", "Clock", "時計", "時間"],
+  ["应用列表", "App list", "アプリ一覧", "應用程式清單"],
+  ["当前没有可显示的应用", "No apps to display", "表示できるアプリはありません", "目前沒有可顯示的應用程式"],
+  ["应用介绍", "App information", "アプリ情報", "應用程式介紹"],
+  ["应用详情", "App details", "アプリ詳細", "應用程式詳細資料"],
+  ["正在载入应用说明页。", "Loading the app information page.", "アプリ情報ページを読み込んでいます。", "正在載入應用程式說明頁。"],
+  ["关闭详情", "Close details", "詳細を閉じる", "關閉詳細資料"],
+  ["应用详情页", "App details page", "アプリ詳細ページ", "應用程式詳細資料頁"],
+  ["正在加载详情页", "Loading details", "詳細を読み込み中", "正在載入詳細資料頁"],
+  ["正在打开应用介绍。", "Opening app information.", "アプリ情報を開いています。", "正在開啟應用程式介紹。"],
+  ["详情页暂时无法显示", "Details are temporarily unavailable", "詳細を表示できません", "暫時無法顯示詳細資料頁"],
+  ["请稍后重试，或检查介绍页地址是否可访问。", "Try again later or check the information page URL.", "しばらくしてから再試行するか、情報ページの URL を確認してください。", "請稍後重試，或檢查介紹頁位址是否可存取。"],
+  ["重试", "Retry", "再試行", "重試"],
+  ["新窗口打开", "Open in new window", "新しいウィンドウで開く", "在新視窗開啟"],
+  ["资源管理", "Media manager", "リソース管理", "資源管理"],
+  ["图像管理", "Image manager", "画像管理", "圖像管理"],
+  ["返回控制面板", "Back to dashboard", "管理画面へ戻る", "返回控制台"],
+  ["刷新列表", "Refresh list", "一覧を更新", "重新整理清單"],
+  ["设备资源", "Device media", "デバイスリソース", "裝置資源"],
+  ["把常用图片和动画集中管理", "Manage images and animations in one place", "画像とアニメーションをまとめて管理します", "集中管理常用圖片與動畫"],
+  ["正在同步资源。", "Syncing media.", "リソースを同期中です。", "正在同步資源。"],
+  ["上传图片", "Upload images", "画像をアップロード", "上傳圖片"],
+  ["PNG / JPG / WEBP / BMP / SVG，静态图会自动适配 320×240", "PNG / JPG / WEBP / BMP / SVG; images are fitted to 320×240", "PNG / JPG / WEBP / BMP / SVG。画像は 320×240 に自動調整されます", "PNG / JPG / WEBP / BMP / SVG；靜態圖片會自動調整為 320×240"],
+  ["选择图片", "Choose images", "画像を選択", "選擇圖片"],
+  ["上传 GIF", "Upload GIF", "GIF をアップロード", "上傳 GIF"],
+  ["仅 GIF", "GIF only", "GIF のみ", "僅限 GIF"],
+  ["选择 GIF", "Choose GIF", "GIF を選択", "選擇 GIF"],
+  ["图片", "Images", "画像", "圖片"],
+  ["资源类型", "Media type", "リソースの種類", "資源類型"],
+  ["已保存到设备", "Saved to device", "デバイスに保存しました", "已儲存到裝置"],
+  ["已恢复默认", "Defaults restored", "初期設定に戻しました", "已恢復預設值"],
+  ["当前无法读取系统状态", "Unable to read system status", "システム状態を取得できません", "目前無法讀取系統狀態"],
+  ["切换中...", "Switching...", "切り替え中...", "切換中..."],
+  ["检查中...", "Checking...", "確認中...", "檢查中..."],
+  ["安装中...", "Installing...", "インストール中...", "安裝中..."],
+  ["刷新", "Refresh", "更新", "重新整理"],
+  ["运行中", "Running", "実行中", "執行中"],
+  ["暂无设备服务", "No device services", "デバイスサービスはありません", "暫無裝置服務"],
+  ["暂无应用", "No apps", "アプリはありません", "暫無應用程式"],
+  ["点击扫描获取附近 WiFi 列表", "Select Scan to find nearby WiFi", "検索を押して周辺 WiFi を探します", "按掃描取得附近 WiFi 清單"],
+  ["当前连接", "Current connection", "現在の接続", "目前連線"],
+  ["已保存热点", "Saved network", "保存済みネットワーク", "已儲存網路"],
+  ["信号强", "Strong signal", "信号：強", "訊號強"],
+  ["信号良好", "Good signal", "信号：良好", "訊號良好"],
+  ["信号一般", "Fair signal", "信号：普通", "訊號普通"],
+  ["信号较弱", "Weak signal", "信号：弱", "訊號較弱"],
+  ["开放网络", "Open network", "オープンネットワーク", "開放網路"],
+  ["需要密码", "Password required", "パスワードが必要", "需要密碼"],
+  ["已选热点", "Selected network", "選択中のネットワーク", "已選網路"],
+  ["安装失败", "Install failed", "インストール失敗", "安裝失敗"],
+  ["检查中", "Checking", "確認中", "檢查中"],
+  ["下载中", "Downloading", "ダウンロード中", "下載中"],
+  ["安装中", "Installing", "インストール中", "安裝中"],
+  ["即将重启", "Restarting soon", "まもなく再起動", "即將重新啟動"],
+  ["更新失败", "Update failed", "更新失敗", "更新失敗"],
+  ["更新中", "Updating", "更新中", "更新中"],
+  ["有新版本", "Update available", "新しいバージョンあり", "有新版本"],
+  ["已是最新", "Up to date", "最新版です", "已是最新版本"],
+  ["请稍后重试", "Try again later", "後でもう一度お試しください", "請稍後重試"],
+  ["发现可安装的新固件。", "A new firmware update is available.", "新しいファームウェアがあります。", "發現可安裝的新韌體。"],
+  ["当前固件无需更新。", "The firmware is up to date.", "ファームウェアは最新版です。", "目前韌體不需要更新。"],
+  ["发现新固件", "New firmware available", "新しいファームウェア", "發現新韌體"],
+  ["当前已是最新版本", "Already up to date", "すでに最新版です", "目前已是最新版本"],
+  ["当前没有可连接的热点，正在尝试扫描。", "No network is available; scanning now.", "接続可能なネットワークがありません。検索しています。", "目前沒有可連線的網路，正在掃描。"],
+  ["密码至少需要 8 位，请重新输入。", "The password must be at least 8 characters.", "パスワードは8文字以上で入力してください。", "密碼至少需要 8 個字元，請重新輸入。"],
+  ["连接中...", "Connecting...", "接続中...", "連線中..."],
+  ["已提交连接请求，正在等待设备联网。", "Connection submitted; waiting for the device.", "接続要求を送信しました。デバイスを待っています。", "已送出連線要求，正在等待裝置連網。"]
+];
+const I18N_PREFIX_ROWS = [
+  ["页面已保存，写入设备失败：", "Saved in the page, but device write failed: ", "ページには保存しましたが、デバイスへの書き込みに失敗しました: ", "頁面已儲存，但寫入裝置失敗："],
+  ["页面已恢复默认，写入设备失败：", "Defaults restored in the page, but device write failed: ", "ページは初期設定に戻しましたが、デバイスへの書き込みに失敗しました: ", "頁面已恢復預設值，但寫入裝置失敗："],
+  ["安装失败：", "Install failed: ", "インストール失敗: ", "安裝失敗："],
+  ["更新失败：", "Update failed: ", "更新失敗: ", "更新失敗："],
+  ["正在上传 ", "Uploading ", "アップロード中 ", "正在上傳 "],
+  ["正在保存并连接 ", "Saving and connecting to ", "保存して接続中 ", "正在儲存並連線 "],
+  ["已开始连接 ", "Connecting to ", "接続を開始しました ", "已開始連線 "],
+  ["连接成功，IP: ", "Connected, IP: ", "接続しました、IP: ", "連線成功，IP: "]
+];
+const I18N_INDEX = { "zh-CN": 0, en: 1, ja: 2, "zh-TW": 3 };
+const i18nTextSources = new WeakMap();
+const i18nAttrSources = new WeakMap();
+let currentLanguage = DEFAULT_LANGUAGE;
+
+function normalizeLanguage(value){
+  const text = String(value || "").trim();
+  if(text === "en" || text === "ja" || text === "zh-TW" || text === "zh-CN") return text;
+  if(/^zh[-_](?:TW|HK|Hant)$/i.test(text) || /^zh-Hant/i.test(text)) return "zh-TW";
+  if(/^ja/i.test(text)) return "ja";
+  if(/^en/i.test(text)) return "en";
+  return DEFAULT_LANGUAGE;
+}
+
+function translateCore(source){
+  const text = String(source || "");
+  const idx = I18N_INDEX[currentLanguage] || 0;
+  const row = I18N_ROWS.find((item) => item[0] === text);
+  if(row) return row[idx] || row[0];
+  const prefix = I18N_PREFIX_ROWS.find((item) => text.startsWith(item[0]));
+  if(prefix) return (prefix[idx] || prefix[0]) + text.slice(prefix[0].length);
+  let match = text.match(/^(\d+) 个$/);
+  if(match){
+    if(currentLanguage === "en") return match[1] + " items";
+    if(currentLanguage === "ja") return match[1] + " 件";
+    if(currentLanguage === "zh-TW") return match[1] + " 個";
+  }
+  match = text.match(/^(\d+) 个项目$/);
+  if(match){
+    if(currentLanguage === "en") return match[1] + " items";
+    if(currentLanguage === "ja") return match[1] + " 件";
+    if(currentLanguage === "zh-TW") return match[1] + " 個項目";
+  }
+  match = text.match(/^已占用 (.+)$/);
+  if(match){
+    if(currentLanguage === "en") return "Used " + match[1];
+    if(currentLanguage === "ja") return "使用済み " + match[1];
+    if(currentLanguage === "zh-TW") return "已使用 " + match[1];
+  }
+  return text;
+}
+
+function translateText(source){
+  const text = String(source || "");
+  const core = text.trim();
+  if(!core) return text;
+  const translated = translateCore(core);
+  return translated === core ? text : text.replace(core, translated);
+}
+
+function localizeTextNode(node, preserveSource){
+  if(!node || !node.nodeValue) return;
+  let source = i18nTextSources.get(node);
+  if(!source || (!preserveSource && node.nodeValue !== translateText(source))){
+    source = node.nodeValue;
+    i18nTextSources.set(node, source);
+  }
+  const translated = translateText(source);
+  if(node.nodeValue !== translated) node.nodeValue = translated;
+}
+
+function localizeElementAttributes(el, preserveSource){
+  if(!el || el.nodeType !== 1) return;
+  const attrs = ["placeholder", "aria-label", "title"];
+  let sources = i18nAttrSources.get(el);
+  if(!sources){ sources = {}; i18nAttrSources.set(el, sources); }
+  attrs.forEach((name) => {
+    if(!el.hasAttribute(name)) return;
+    const current = el.getAttribute(name) || "";
+    if(!sources[name] || (!preserveSource && current !== translateText(sources[name]))) sources[name] = current;
+    const translated = translateText(sources[name]);
+    if(current !== translated) el.setAttribute(name, translated);
+  });
+}
+
+function localizeTree(root, preserveSource){
+  if(!root) return;
+  if(root.nodeType === 3){ localizeTextNode(root, preserveSource); return; }
+  if(root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
+  if(root.nodeType === 1 && /^(SCRIPT|STYLE|TEXTAREA)$/.test(root.tagName)) return;
+  if(root.nodeType === 1) localizeElementAttributes(root, preserveSource);
+  Array.from(root.childNodes || []).forEach((child) => localizeTree(child, preserveSource));
+}
+
+function applyLanguage(value, persist){
+  currentLanguage = normalizeLanguage(value);
+  document.documentElement.lang = currentLanguage;
+  document.title = currentLanguage === "ja" ? "Cubic ランチャー" : (currentLanguage === "zh-TW" ? "Cubic 啟動器" : (currentLanguage === "zh-CN" ? "Cubic 启动器" : "Cubic Launcher"));
+  localizeTree(document.body, true);
+  const select = qs("#languageSelect");
+  if(select) select.value = currentLanguage;
+  if(persist) storageSet(STORAGE_KEYS.language, currentLanguage);
+}
+
+const i18nObserver = new MutationObserver((mutations) => {
+  mutations.forEach((mutation) => {
+    if(mutation.type === "characterData") localizeTextNode(mutation.target, false);
+    if(mutation.type === "attributes") localizeElementAttributes(mutation.target, false);
+    Array.from(mutation.addedNodes || []).forEach((node) => localizeTree(node, false));
+  });
+});
+i18nObserver.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["placeholder", "aria-label", "title"] });
 
 function showToast(text, isError, durationMs){
   const el = qs("#toast");
@@ -3112,9 +3380,34 @@ function ensureTimezoneOption(value){
 function loadStoredSettings(){
   const timezone = storageGet(STORAGE_KEYS.timezone, DEFAULT_TIMEZONE);
   const weatherAddress = storageGet(STORAGE_KEYS.weatherAddress, "");
+  const language = normalizeLanguage(storageGet(STORAGE_KEYS.language, DEFAULT_LANGUAGE));
   ensureTimezoneOption(timezone);
   qs("#timezoneSelect").value = timezone;
   qs("#weatherAddress").value = weatherAddress;
+  qs("#languageSelect").value = language;
+  applyLanguage(language, false);
+}
+
+async function loadDeviceSettings(){
+  try{
+    const raw = await readDevtoolsTextFile(SETTINGS_JSON_PATH, 64 * 1024);
+    const doc = JSON.parse(raw || "{}");
+    latestDeviceSettings = doc && typeof doc === "object" ? Object.assign({}, doc) : {};
+    const timezone = String(doc.timezone || DEFAULT_TIMEZONE);
+    const weatherAddress = String(doc.weather_address || doc.weatherAddress || "");
+    const language = normalizeLanguage(doc.language || doc.locale || doc.lang || DEFAULT_LANGUAGE);
+    ensureTimezoneOption(timezone);
+    qs("#timezoneSelect").value = timezone;
+    qs("#weatherAddress").value = weatherAddress;
+    qs("#languageSelect").value = language;
+    storageSet(STORAGE_KEYS.timezone, timezone);
+    storageSet(STORAGE_KEYS.weatherAddress, weatherAddress);
+    storageSet(STORAGE_KEYS.language, language);
+    applyLanguage(language, false);
+    return doc;
+  }catch(err){
+    return null;
+  }
 }
 
 function setBadgeState(sel, tone, text){
@@ -6066,11 +6359,21 @@ async function exitToLauncher(){
 }
 
 function currentSettingsPayload(){
-  return {
+  const weatherAddress = qs("#weatherAddress").value.trim();
+  const previousAddress = String(latestDeviceSettings.weather_address || latestDeviceSettings.weatherAddress || "").trim();
+  const payload = Object.assign({}, latestDeviceSettings, {
     timezone: qs("#timezoneSelect").value || DEFAULT_TIMEZONE,
-    weather_address: qs("#weatherAddress").value.trim(),
+    weather_address: weatherAddress,
+    language: normalizeLanguage(qs("#languageSelect").value),
     saved_at: new Date().toISOString()
-  };
+  });
+  if(weatherAddress !== previousAddress){
+    delete payload.weather_location_address;
+    delete payload.weather_location_raw;
+    delete payload.weather_location_id;
+    delete payload.weather_city;
+  }
+  return payload;
 }
 
 async function saveSettings(ev){
@@ -6080,10 +6383,13 @@ async function saveSettings(ev){
   const payload = currentSettingsPayload();
   storageSet(STORAGE_KEYS.timezone, payload.timezone);
   storageSet(STORAGE_KEYS.weatherAddress, payload.weather_address);
+  storageSet(STORAGE_KEYS.language, payload.language);
+  applyLanguage(payload.language, false);
   button.disabled = true;
   button.textContent = "保存中...";
   try{
     await uploadJsonFile(SETTINGS_JSON_PATH, payload);
+    latestDeviceSettings = Object.assign({}, payload);
     showToast("已保存到设备", false);
   }catch(err){
     showToast("页面已保存，写入设备失败：" + (err.message || String(err)), true);
@@ -6096,13 +6402,16 @@ async function saveSettings(ev){
 async function resetSettings(){
   storageRemove(STORAGE_KEYS.timezone);
   storageRemove(STORAGE_KEYS.weatherAddress);
+  storageRemove(STORAGE_KEYS.language);
   loadStoredSettings();
   const button = qs("#resetSettings");
   const prevText = button.textContent;
   button.disabled = true;
   button.textContent = "恢复中...";
   try{
-    await uploadJsonFile(SETTINGS_JSON_PATH, currentSettingsPayload());
+    const payload = currentSettingsPayload();
+    await uploadJsonFile(SETTINGS_JSON_PATH, payload);
+    latestDeviceSettings = Object.assign({}, payload);
     showToast("已恢复默认", false);
   }catch(err){
     showToast("页面已恢复默认，写入设备失败：" + (err.message || String(err)), true);
@@ -6228,6 +6537,7 @@ function handleMediaInputChange(kind, ev){
 qs("#exitBtn").addEventListener("click", exitToLauncher);
 qs("#settingsForm").addEventListener("submit", saveSettings);
 qs("#resetSettings").addEventListener("click", resetSettings);
+qs("#languageSelect").addEventListener("change", (ev) => applyLanguage(ev.target.value, true));
 qs("#installAppBtn").addEventListener("click", openAppManageView);
 qs("#openServiceManageBtn").addEventListener("click", () => openAppManageView("service"));
 qs("#backFromAppManageBtn").addEventListener("click", returnToStartView);
@@ -6263,6 +6573,7 @@ qs("#wifiForm").addEventListener("submit", handleWifiSubmit);
 
 initAppManageView();
 loadStoredSettings();
+loadDeviceSettings();
 renderMediaLibrary();
 setWifiPasswordVisibility(false);
 loadMediaLibrary({ silent: true });

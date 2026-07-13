@@ -3,7 +3,7 @@
     end
 
     WEATHER_APP = {
-    VERSION = "2026-07-04-weather-cubicserver-v2",
+    VERSION = "2026-07-10-weather-location-cache-v4",
     DEBUG = false,
 
     SCREEN_W = 320,
@@ -15,6 +15,8 @@
     WEATHER_3D_PATH = "/v1/weather/3d",
     WEATHER_CITY_PATH = "/v1/weather/cities",
     WEATHER_LOCATION = "",
+    LANGUAGE = "zh-CN",
+    WEATHER_API_LANG = "zh",
     WEATHER_FETCH_MS = 60000,
     FORECAST_FETCH_MS = 10 * 60000,
     TIME_SYNC_RETRY_MS = 30000,
@@ -52,7 +54,7 @@
     local GLASS_W = 300
     local GLASS_H = 66
     local GLASS_BLUR = 6
-    local STARTUP_HOLD_MS = 800
+    local STARTUP_HOLD_MS = 300
     local FORECAST_GLASS_X = 10
     local FORECAST_GLASS_Y = 45
     local FORECAST_GLASS_W = 300
@@ -64,9 +66,41 @@
     local pcall_fn = pcall
     local string_format = string.format
 
+    local I18N = {
+    ["zh-CN"] = { weather = "天气", waiting = "等待数据", updating = "更新中", today = "今天", sync_time = "同步时间" },
+    en = { weather = "Weather", waiting = "Waiting", updating = "Updating", today = "Today", sync_time = "SYNC TIME" },
+    ja = { weather = "天気", waiting = "待機中", updating = "更新中", today = "今日", sync_time = "時刻同期" },
+    ["zh-TW"] = { weather = "天氣", waiting = "等待資料", updating = "更新中", today = "今天", sync_time = "同步時間" },
+    }
+
+    local function normalize_language(value)
+    local text = tostring(value or ""):gsub("_", "-")
+    if text == "en" or text:match("^en%-") then return "en", "en" end
+    if text == "ja" or text:match("^ja%-") then return "ja", "ja" end
+    if text == "zh-TW" or text == "zh-Hant" or text:match("^zh%-Hant") or text:match("^zh%-HK") then return "zh-TW", "zh-hant" end
+    return "zh-CN", "zh"
+    end
+
+    local function tr(key)
+    local dict = I18N[APP.LANGUAGE] or I18N["zh-CN"]
+    return dict[key] or I18N.en[key] or tostring(key or "")
+    end
+
+    local function display_city_name()
+    if APP.CITY_NAME == "" or APP.CITY_NAME == "Weather" then return tr("weather") end
+    return APP.CITY_NAME
+    end
+
+    local function startup_boot_city()
+    local city = tostring(APP.CITY_NAME or "")
+    if city ~= "" and not city:find("[\128-\255]") then return city end
+    return "Weather"
+    end
+
     APP.running = true
     APP.timers = {}
     APP.ui = {}
+    APP.settings_doc = {}
     APP.input = {
     mode = "none",
     left_code = nil,
@@ -203,6 +237,28 @@
         end
     end
     return nil
+    end
+
+    local function encode_json(doc)
+    local codec = rawget(_G, "json") or rawget(_G, "sjson")
+    if not codec or not codec.encode then return nil end
+    local ok, raw = pcall_fn(function() return codec.encode(doc) end)
+    if ok and type(raw) == "string" and raw ~= "" then return raw end
+    return nil
+    end
+
+    local function write_text(path, text)
+    if not file or type(text) ~= "string" then return false end
+    if file.putcontents then
+        local ok, result = pcall_fn(function() return file.putcontents(path, text) end)
+        if ok and result then return true end
+    end
+    if not file.open then return false end
+    local fd = file.open(path, "w")
+    if not fd then return false end
+    local ok = pcall_fn(function() fd:write(text) end)
+    pcall_fn(function() fd:close() end)
+    return ok and true or false
     end
 
     local function url_encode(text)
@@ -471,6 +527,7 @@
     local function load_runtime_settings()
     local raw = read_text(APP.SETTINGS_PATH)
     local doc = decode_json(raw) or {}
+    APP.settings_doc = doc
 
     local timezone = trim(doc.timezone)
     if timezone == "" then
@@ -479,12 +536,51 @@
     APP.TIMEZONE = timezone
     APP.TZ_OFFSET_SEC = posix_tz_offset_sec(timezone)
 
+    APP.LANGUAGE, APP.WEATHER_API_LANG = normalize_language(doc.language or doc.locale or doc.lang)
+
     apply_weather_address(doc.weather_address or doc.weatherAddress)
 
     local city = trim(doc.weather_city or doc.city_name or doc.city)
-    if city ~= "" then
+    local cached_address = trim(doc.weather_location_address or doc.weather_location_raw)
+    local cached_id = trim(doc.weather_location_id)
+    if cached_address ~= "" and cached_address == APP.WEATHER_LOCATION and cached_id ~= "" then
+        APP.state.resolved_location_raw = APP.WEATHER_LOCATION
+        APP.state.resolved_location_id = cached_id
+    end
+    if city ~= "" and (cached_address == "" or cached_address == APP.WEATHER_LOCATION) then
         APP.CITY_NAME = city
     end
+    end
+
+    local function save_location_cache(raw_location, location_id, city_name)
+    raw_location = trim(raw_location)
+    location_id = trim(location_id)
+    city_name = trim(city_name)
+    if raw_location == "" or location_id == "" then return false end
+
+    local doc = APP.settings_doc
+    if type(doc) ~= "table" then doc = {} end
+    if trim(doc.weather_location_address) == raw_location
+        and trim(doc.weather_location_id) == location_id
+        and (city_name == "" or trim(doc.weather_city) == city_name) then
+        return true
+    end
+
+    doc.weather_location_address = raw_location
+    doc.weather_location_id = location_id
+    if city_name ~= "" then doc.weather_city = city_name end
+    local encoded = encode_json(doc)
+    if not encoded then
+        warn("location cache encode failed")
+        return false
+    end
+    if not write_text(APP.SETTINGS_PATH, encoded) then
+        warn("location cache write failed", APP.SETTINGS_PATH)
+        return false
+    end
+    APP.settings_doc = doc
+    log("location cache saved", raw_location, location_id, city_name)
+    return true
     end
 
     local function sd_to_lv(path)
@@ -571,8 +667,19 @@
 
     local function init_fonts()
     FONT_10 = load_font_ref("/sd/apps/weather/font/weather_tiny_10.bin", FONT_10)
-    FONT_12 = load_font_ref("/sd/apps/weather/font/weather_ui_12.bin", FONT_12)
-    FONT_16 = load_font_ref("/sd/apps/weather/font/weather_ui_16.bin", FONT_16)
+    if APP.LANGUAGE == "zh-CN" then
+        FONT_12 = load_font_ref("/sd/apps/weather/font/weather_ui_zh_cn_12.bin", FONT_12)
+        FONT_16 = load_font_ref("/sd/apps/weather/font/weather_ui_zh_cn_16.bin", FONT_16)
+    elseif APP.LANGUAGE == "zh-TW" then
+        FONT_12 = load_font_ref("/sd/apps/weather/font/weather_ui_zh_tw_12.bin", FONT_12)
+        FONT_16 = load_font_ref("/sd/apps/weather/font/weather_ui_zh_tw_16.bin", FONT_16)
+    elseif APP.LANGUAGE == "ja" then
+        FONT_12 = load_font_ref("/sd/apps/weather/font/weather_ui_ja_12.bin", FONT_12)
+        FONT_16 = load_font_ref("/sd/apps/weather/font/weather_ui_ja_16.bin", FONT_16)
+    else
+        FONT_12 = load_font_ref("/sd/apps/weather/font/weather_ui_12.bin", FONT_12)
+        FONT_16 = load_font_ref("/sd/apps/weather/font/weather_ui_16.bin", FONT_16)
+    end
     FONT_28 = load_font_ref("/sd/apps/weather/font/weather_num_28.bin", FONT_28)
     FONT_34 = load_font_ref("/sd/apps/weather/font/weather_temp_34.bin", FONT_28)
     FONT_40 = load_font_ref("/sd/apps/weather/font/weather_time_40.bin", FONT_28)
@@ -650,13 +757,21 @@
     local function short_text(s, max_len)
     s = tostring(s or "")
     max_len = math_floor(tonumber(max_len) or 0)
-    if max_len <= 0 or #s <= max_len then
-        return s
+    if max_len <= 0 then return s end
+    local positions = {}
+    local i = 1
+    while i <= #s do
+        positions[#positions + 1] = i
+        local b = string.byte(s, i) or 0
+        if b < 0x80 then i = i + 1
+        elseif b < 0xE0 then i = i + 2
+        elseif b < 0xF0 then i = i + 3
+        else i = i + 4 end
     end
-    if max_len <= 3 then
-        return s:sub(1, max_len)
-    end
-    return s:sub(1, max_len - 3) .. "..."
+    if #positions <= max_len then return s end
+    local keep = math.max(1, max_len - 3)
+    local end_pos = positions[keep + 1] or (#s + 1)
+    return s:sub(1, end_pos - 1) .. "..."
     end
 
     local function now_ms()
@@ -828,7 +943,7 @@
     local function format_date_text()
     local t = get_local_tm()
     if not t then
-        return "SYNC TIME"
+        return tr("sync_time")
     end
     if t.year and t.mon and t.day then
         return string_format("%04d.%s.%s", t.year, two(t.mon), two(t.day))
@@ -856,7 +971,7 @@
     local function format_condition_text(text)
     text = tostring(text or "")
     if text == "" then
-        return "Waiting"
+        return tr("waiting")
     end
     return short_text(text, 12)
     end
@@ -1265,7 +1380,7 @@
     APP.ui.forecast_bottom = create_glass_line(panel, 24, 160, 252, 1, 14)
 
     APP.ui.forecast_cols = {
-        create_forecast_item(panel, 0, "Today"),
+        create_forecast_item(panel, 0, tr("today")),
         create_forecast_item(panel, 100, "+1D"),
         create_forecast_item(panel, 200, "+2D"),
     }
@@ -1284,7 +1399,7 @@
     call(rawget(_G, "lv_obj_set_style_pad_all"), page, 0, MAIN_STYLE)
 
     APP.ui.startup_icon = create_img(page, qweather_icon_path_for("partly", "103"), 136, 58, 192)
-    APP.ui.startup_city_label = create_label(page, APP.CITY_NAME, FONT_16, C.text, 32, 120, 256, ALIGN_CENTER)
+    APP.ui.startup_city_label = create_label(page, startup_boot_city(), FONT_16, C.text, 32, 120, 256, ALIGN_CENTER)
     APP.ui.startup_title_label = create_label(page, "Weather", FONT_12, C.text_soft, 32, 145, 256, ALIGN_CENTER)
     create_glass_line(page, 118, 170, 84, 1, 42)
 
@@ -1294,7 +1409,8 @@
     end
 
     local function refresh_startup_labels()
-    set_label_text(APP.ui.startup_city_label, APP.CITY_NAME)
+    set_label_text(APP.ui.startup_city_label, display_city_name())
+    set_label_text(APP.ui.startup_title_label, tr("weather"))
     style_label(APP.ui.startup_city_label, FONT_16, C.text, 255, ALIGN_CENTER)
     style_label(APP.ui.startup_title_label, FONT_12, C.text_soft, 255, ALIGN_CENTER)
     end
@@ -1356,8 +1472,6 @@
     local startup_screen = nil
     local main_screen = nil
 
-    init_fonts()
-
     if lv_scr_load then
         startup_screen = create_screen()
         main_screen = create_screen()
@@ -1382,6 +1496,16 @@
         APP.ui.startup_page = create_startup_page(startup_parent)
     end
 
+    -- 启动页先用内置小字体显示并刷新，再同步加载当前语言的大字库。
+    if lv_refr_now then
+        pcall_fn(function() lv_refr_now(nil) end)
+    elseif lv_timer_handler then
+        pcall_fn(lv_timer_handler)
+    elseif lv_task_handler then
+        pcall_fn(lv_task_handler)
+    end
+    init_fonts()
+
     APP.ui.root = root
 
     call(lv_obj_set_style_bg_color, root, C.black, MAIN_STYLE)
@@ -1401,8 +1525,8 @@
     call(lv_obj_set_size, now_page, APP.SCREEN_W, APP.SCREEN_H)
 
     APP.ui.time_label = create_label(now_page, "--:--", FONT_34, C.text, 14, 23, 150, ALIGN_LEFT)
-    APP.ui.city_label = create_label(now_page, APP.CITY_NAME, FONT_16, C.text, 16, 68, 166, ALIGN_LEFT)
-    APP.ui.cond_label = create_label(now_page, "Waiting", FONT_12, C.text, 16, 90, 132, ALIGN_LEFT)
+    APP.ui.city_label = create_label(now_page, display_city_name(), FONT_16, C.text, 16, 68, 166, ALIGN_LEFT)
+    APP.ui.cond_label = create_label(now_page, tr("waiting"), FONT_12, C.text, 16, 90, 132, ALIGN_LEFT)
     APP.ui.date_label = create_label(now_page, "--/--", FONT_12, C.text_soft, 16, 113, 132, ALIGN_LEFT)
 
     APP.ui.weather_icon = create_img(now_page, qweather_icon_path("partly"), 206, 20, 320)
@@ -1444,17 +1568,21 @@
     if not APP.ui.startup_screen then
         call(rawget(_G, "lv_obj_move_foreground"), APP.ui.startup_page)
     end
+    APP.ui.ready = true
     end
 
     local function render_clock()
     set_label_text(APP.ui.time_label, format_clock_text())
-    set_label_text(APP.ui.city_label, APP.CITY_NAME)
-    set_label_text(APP.ui.startup_city_label, APP.CITY_NAME)
+    set_label_text(APP.ui.city_label, display_city_name())
+    set_label_text(APP.ui.startup_city_label, display_city_name())
     set_label_text(APP.ui.date_label, format_date_text())
     end
 
     local function render_weather()
     if not APP.running then
+        return
+    end
+    if not APP.ui.ready then
         return
     end
 
@@ -1467,7 +1595,7 @@
 
     if not APP.state.valid then
         set_label_text(APP.ui.temp_label, "--" .. CELSIUS)
-        set_label_text(APP.ui.cond_label, APP.state.request_inflight and "Updating" or "Waiting")
+        set_label_text(APP.ui.cond_label, APP.state.request_inflight and tr("updating") or tr("waiting"))
         set_label_text(APP.ui.precip.value, "--mm")
         set_label_text(APP.ui.humidity.value, "--%")
         set_label_text(APP.ui.wind.value, "--")
@@ -1492,7 +1620,7 @@
         local col = cols[i]
         local day = days[i]
         if col then
-        set_label_text(col.day, i == 1 and "Today" or ("+" .. tostring(i - 1) .. "D"))
+        set_label_text(col.day, i == 1 and tr("today") or ("+" .. tostring(i - 1) .. "D"))
         if APP.state.forecast.valid and day then
             set_img_src(col.icon, qweather_icon_path_for("partly", day.icon))
             set_label_text(col.text, format_condition_text(day.text))
@@ -1776,6 +1904,7 @@ end
         APP.CITY_NAME = name
         render_clock()
     end
+    save_location_cache(raw_location, id, name ~= "" and name or APP.CITY_NAME)
 
     return id, nil
     end
@@ -1825,7 +1954,8 @@ end
     local url = APP.WEATHER_CITY_PATH
         .. "?location="
         .. url_encode(raw_location)
-        .. "&number=1&lang=zh"
+        .. "&number=1&lang="
+        .. url_encode(APP.WEATHER_API_LANG)
 
     log("city request", url)
 
@@ -1886,7 +2016,8 @@ end
         local url = APP.WEATHER_NOW_PATH
         .. "?location="
         .. url_encode(location)
-        .. "&unit=m"
+        .. "&unit=m&lang="
+        .. url_encode(APP.WEATHER_API_LANG)
 
         log("request", url)
 
@@ -1943,7 +2074,8 @@ end
         local url = APP.WEATHER_3D_PATH
         .. "?location="
         .. url_encode(location)
-        .. "&unit=m"
+        .. "&unit=m&lang="
+        .. url_encode(APP.WEATHER_API_LANG)
 
         log("forecast request", url)
 
@@ -2095,11 +2227,12 @@ end
 
     load_runtime_settings()
     init_time_module()
+    -- 先启动异步网络请求，让 DNS/HTTP 与启动页和大字体加载并行。
+    request_weather()
+    request_forecast()
     init_ui()
     render_clock()
     render_weather()
     render_forecast()
-    request_weather()
-    request_forecast()
     bind_input()
     start_timers()

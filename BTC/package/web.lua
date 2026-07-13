@@ -81,8 +81,9 @@ local function js_string(text)
 end
 
 -- 构造 Web 控制页，页面脚本使用注入的 API 前缀。
-local function build_html(api_prefix)
+local function build_html(api_prefix, language)
   api_prefix = js_string(api_prefix)
+  language = js_string(language or "zh-CN")
   return table.concat({
 [=[<!doctype html>
 <html lang="zh-CN">
@@ -258,7 +259,7 @@ select:focus,input:focus,button:focus-visible{border-color:rgba(10,132,255,.5);b
       <div class="meta" id="routeMeta">loading</div>
     </div>
     <div class="top-actions">
-      <a class="main-link" href="/main">Main</a>
+      <a class="main-link" href="/main" data-i18n="main">Main</a>
       <div class="badge" id="statusBadge">idle</div>
     </div>
   </header>
@@ -282,96 +283,96 @@ select:focus,input:focus,button:focus-visible{border-color:rgba(10,132,255,.5);b
       </div>
 
       <div class="stats">
-        <div class="stat"><span>周期</span><strong id="statInterval">--</strong></div>
-        <div class="stat"><span>最高</span><strong id="statHigh">--</strong></div>
-        <div class="stat"><span>最低</span><strong id="statLow">--</strong></div>
-        <div class="stat"><span>更新</span><strong id="statUpdate">--</strong></div>
+        <div class="stat"><span data-i18n="interval">周期</span><strong id="statInterval">--</strong></div>
+        <div class="stat"><span data-i18n="high">最高</span><strong id="statHigh">--</strong></div>
+        <div class="stat"><span data-i18n="low">最低</span><strong id="statLow">--</strong></div>
+        <div class="stat"><span data-i18n="updated">更新</span><strong id="statUpdate">--</strong></div>
       </div>
     </article>
 
     <aside class="panel controls">
       <div class="seg" id="groupButtons">
-        <button data-group="crypto">币价</button>
-        <button data-group="nasdaq">纳斯达克</button>
-        <button data-group="metal">金银铜</button>
-        <button data-group="ashare">A股</button>
+        <button data-group="crypto" data-i18n="crypto">币价</button>
+        <button data-group="nasdaq" data-i18n="nasdaq">纳斯达克</button>
+        <button data-group="metal" data-i18n="metal">金银铜</button>
+        <button data-group="ashare" data-i18n="ashare">A股</button>
       </div>
 
       <div class="field">
-        <label>显示币种</label>
+        <label data-i18n="currency">显示币种</label>
         <div class="seg currency-seg" id="currencyButtons">
-          <button data-currency="USD">美金</button>
-          <button data-currency="CNY">人民币</button>
+          <button data-currency="USD" data-i18n="usd">美金</button>
+          <button data-currency="CNY" data-i18n="cny">人民币</button>
         </div>
         <select class="hidden" id="currencySelect"></select>
       </div>
 
       <div class="field">
-        <label for="assetSelect">标的</label>
+        <label for="assetSelect" data-i18n="asset">标的</label>
         <select id="assetSelect"></select>
       </div>
 
       <div class="field">
-        <label for="intervalSelect">走势周期</label>
+        <label for="intervalSelect" data-i18n="trend_interval">走势周期</label>
         <select id="intervalSelect"></select>
       </div>
 
       <div class="field">
-        <label for="modeSelect">图表</label>
+        <label for="modeSelect" data-i18n="chart">图表</label>
         <select id="modeSelect">
-          <option value="line">折线</option>
-          <option value="candle">K线</option>
+          <option value="line" data-i18n="line">折线</option>
+          <option value="candle" data-i18n="candle">K线</option>
         </select>
       </div>
 
       <div class="field">
-        <label for="maSelect">均线</label>
+        <label for="maSelect" data-i18n="ma">均线</label>
         <select id="maSelect">
-          <option value="off">不显示</option>
+          <option value="off" data-i18n="off">不显示</option>
           <option value="10">MA10</option>
           <option value="20">MA20</option>
         </select>
       </div>
 
       <div class="actions">
-        <button class="secondary" id="refreshNow">刷新</button>
+        <button class="secondary" id="refreshNow" data-i18n="refresh">刷新</button>
       </div>
 
       <div class="divider"></div>
 
-      <div class="subhead">自定义</div>
+      <div class="subhead" data-i18n="custom">自定义</div>
       <div class="grid2">
         <div class="field">
-          <label for="sourceSelect">来源</label>
+          <label for="sourceSelect" data-i18n="source">来源</label>
           <select id="sourceSelect">
-            <option value="binance">币价</option>
-            <option value="eastmoney">Eastmoney公开</option>
+            <option value="binance" data-i18n="crypto">币价</option>
+            <option value="eastmoney" data-i18n="eastmoney">Eastmoney公开</option>
           </select>
         </div>
         <div class="field" id="marketField">
-          <label for="marketSelect">市场</label>
+          <label for="marketSelect" data-i18n="market">市场</label>
           <select id="marketSelect">
-            <option value="1">沪市/指数</option>
-            <option value="0">深市</option>
-            <option value="100">纳斯达克指数</option>
-            <option value="105">美股</option>
-            <option value="101">金银铜期货</option>
+            <option value="1" data-i18n="shanghai">沪市/指数</option>
+            <option value="0" data-i18n="shenzhen">深市</option>
+            <option value="100" data-i18n="nasdaq_index">纳斯达克指数</option>
+            <option value="105" data-i18n="us_stock">美股</option>
+            <option value="101" data-i18n="metal_futures">金银铜期货</option>
           </select>
         </div>
       </div>
       <div class="grid2">
         <div class="field">
-          <label for="symbolInput">代码</label>
+          <label for="symbolInput" data-i18n="symbol">代码</label>
           <input id="symbolInput" value="BTCUSDT" autocomplete="off">
         </div>
         <div class="field">
-          <label for="nameInput">名称</label>
+          <label for="nameInput" data-i18n="name">名称</label>
           <input id="nameInput" value="BTC / USDT" autocomplete="off">
         </div>
       </div>
       <div class="actions">
-        <button class="primary" id="applyCustom">添加并查看</button>
-        <button class="secondary" id="clearCustom">清空</button>
+        <button class="primary" id="applyCustom" data-i18n="add_view">添加并查看</button>
+        <button class="secondary" id="clearCustom" data-i18n="clear">清空</button>
       </div>
       <div class="hint" id="hint"></div>
     </aside>
@@ -384,7 +385,25 @@ select:focus,input:focus,button:focus-visible{border-color:rgba(10,132,255,.5);b
 
 <script>
 const API = "]=], api_prefix, [=[";
-const groupText = { crypto: "币价", nasdaq: "纳斯达克", metal: "金银铜", ashare: "A股" };
+const LANG = "]=], language, [=[";
+const MESSAGES = {
+  "zh-CN": {main:"主页",interval:"周期",high:"最高",low:"最低",updated:"更新",crypto:"币价",nasdaq:"纳斯达克",metal:"金银铜",ashare:"A股",currency:"显示币种",usd:"美金",cny:"人民币",asset:"标的",trend_interval:"走势周期",chart:"图表",line:"折线",candle:"K线",ma:"均线",off:"不显示",refresh:"刷新",custom:"自定义",source:"来源",eastmoney:"Eastmoney公开",market:"市场",shanghai:"沪市/指数",shenzhen:"深市",nasdaq_index:"纳斯达克指数",us_stock:"美股",metal_futures:"金银铜期货",symbol:"代码",name:"名称",add_view:"添加并查看",clear:"清空",loading:"加载中",ready:"就绪",cold:"启动中",error:"错误"},
+  en: {main:"Main",interval:"Interval",high:"High",low:"Low",updated:"Updated",crypto:"Crypto",nasdaq:"Nasdaq",metal:"Metals",ashare:"A-shares",currency:"Display currency",usd:"USD",cny:"CNY",asset:"Asset",trend_interval:"Trend interval",chart:"Chart",line:"Line",candle:"Candles",ma:"Moving average",off:"Off",refresh:"Refresh",custom:"Custom",source:"Source",eastmoney:"Eastmoney public",market:"Market",shanghai:"Shanghai / Index",shenzhen:"Shenzhen",nasdaq_index:"Nasdaq index",us_stock:"US stocks",metal_futures:"Metal futures",symbol:"Symbol",name:"Name",add_view:"Add and view",clear:"Clear",loading:"Loading",ready:"Ready",cold:"Starting",error:"Error"},
+  ja: {main:"メイン",interval:"期間",high:"高値",low:"安値",updated:"更新",crypto:"暗号資産",nasdaq:"ナスダック",metal:"金銀銅",ashare:"中国A株",currency:"表示通貨",usd:"米ドル",cny:"人民元",asset:"銘柄",trend_interval:"表示期間",chart:"チャート",line:"折線",candle:"ローソク",ma:"移動平均",off:"表示しない",refresh:"更新",custom:"カスタム",source:"データ元",eastmoney:"Eastmoney公開",market:"市場",shanghai:"上海 / 指数",shenzhen:"深圳",nasdaq_index:"ナスダック指数",us_stock:"米国株",metal_futures:"金属先物",symbol:"コード",name:"名称",add_view:"追加して表示",clear:"クリア",loading:"読込中",ready:"準備完了",cold:"起動中",error:"エラー"},
+  "zh-TW": {main:"主頁",interval:"週期",high:"最高",low:"最低",updated:"更新",crypto:"幣價",nasdaq:"那斯達克",metal:"金銀銅",ashare:"A股",currency:"顯示幣別",usd:"美元",cny:"人民幣",asset:"標的",trend_interval:"走勢週期",chart:"圖表",line:"折線",candle:"K線",ma:"均線",off:"不顯示",refresh:"重新整理",custom:"自訂",source:"來源",eastmoney:"Eastmoney公開",market:"市場",shanghai:"滬市/指數",shenzhen:"深市",nasdaq_index:"那斯達克指數",us_stock:"美股",metal_futures:"金銀銅期貨",symbol:"代碼",name:"名稱",add_view:"新增並檢視",clear:"清除",loading:"載入中",ready:"就緒",cold:"啟動中",error:"錯誤"}
+};
+const MSG = MESSAGES[LANG] || MESSAGES["zh-CN"];
+const tr = (key) => MSG[key] || MESSAGES["zh-CN"][key] || key;
+const ERROR_TEXT = {
+  "zh-CN": {state:"状态读取失败：",choose:"请选择标的",switch:"切换失败：",custom:"自定义失败：",refresh:"刷新失败："},
+  en: {state:"Failed to read status: ",choose:"Select an asset",switch:"Switch failed: ",custom:"Custom asset failed: ",refresh:"Refresh failed: "},
+  ja: {state:"状態の取得に失敗: ",choose:"銘柄を選択してください",switch:"切り替え失敗: ",custom:"カスタム銘柄の追加に失敗: ",refresh:"更新失敗: "},
+  "zh-TW": {state:"讀取狀態失敗：",choose:"請選擇標的",switch:"切換失敗：",custom:"自訂標的失敗：",refresh:"重新整理失敗："}
+};
+const errText = ERROR_TEXT[LANG] || ERROR_TEXT["zh-CN"];
+document.documentElement.lang = LANG;
+document.querySelectorAll("[data-i18n]").forEach((node) => { node.textContent = tr(node.dataset.i18n); });
+const groupText = { crypto: tr("crypto"), nasdaq: tr("nasdaq"), metal: tr("metal"), ashare: tr("ashare") };
 const els = {
   routeMeta: document.getElementById("routeMeta"),
   statusBadge: document.getElementById("statusBadge"),
@@ -420,7 +439,7 @@ function safe(value, fallback){
 }
 
 function modeLabel(mode){
-  return mode === "candle" ? "K线" : "折线";
+  return mode === "candle" ? tr("candle") : tr("line");
 }
 
 function maLabel(value){
@@ -430,7 +449,18 @@ function maLabel(value){
   if(value === "20"){
     return "MA20";
   }
-  return "不显示";
+  return tr("off");
+}
+
+const ASSET_NAMES = {
+  en: {"nasdaq:100.NDX":"Nasdaq","nasdaq:100.NDX100":"Nasdaq 100","metal:101.GC00Y":"COMEX Gold","metal:101.SI00Y":"COMEX Silver","metal:101.HG00Y":"COMEX Copper","ashare:1.000001":"SSE Composite","ashare:1.000300":"CSI 300","ashare:1.000905":"CSI 500","ashare:1.000852":"CSI 1000","ashare:0.399001":"SZSE Component","ashare:0.399006":"ChiNext","ashare:1.600519":"Kweichow Moutai","ashare:0.000001":"Ping An Bank","ashare:0.300750":"CATL"},
+  ja: {"nasdaq:100.NDX":"ナスダック","nasdaq:100.NDX100":"ナスダック100","metal:101.GC00Y":"COMEX金","metal:101.SI00Y":"COMEX銀","metal:101.HG00Y":"COMEX銅","ashare:1.000001":"上海総合","ashare:1.000300":"CSI 300","ashare:1.000905":"CSI 500","ashare:1.000852":"CSI 1000","ashare:0.399001":"深圳成分","ashare:0.399006":"創業板","ashare:1.600519":"貴州茅台","ashare:0.000001":"平安銀行","ashare:0.300750":"CATL"},
+  "zh-TW": {"nasdaq:100.NDX":"那斯達克","nasdaq:100.NDX100":"那斯達克100","metal:101.GC00Y":"COMEX黃金","metal:101.SI00Y":"COMEX白銀","metal:101.HG00Y":"COMEX銅","ashare:1.000001":"上證指數","ashare:1.000300":"滬深300","ashare:1.000905":"中證500","ashare:1.000852":"中證1000","ashare:0.399001":"深證成指","ashare:0.399006":"創業板指","ashare:1.600519":"貴州茅台","ashare:0.000001":"平安銀行","ashare:0.300750":"寧德時代"}
+};
+
+function assetDisplayName(asset){
+  const map = ASSET_NAMES[LANG] || {};
+  return map[asset && asset.id] || safe(asset && asset.text, asset && asset.symbol || "--");
 }
 
 function rateLabel(value){
@@ -520,7 +550,7 @@ function currencyButtons(){
 }
 
 function assetLabel(asset){
-  return safe(asset.text, asset.symbol) + " · " + safe(asset.symbol || asset.secid, "");
+  return assetDisplayName(asset) + " · " + safe(asset.symbol || asset.secid, "");
 }
 
 function renderOptions(state){
@@ -553,7 +583,7 @@ function renderOptions(state){
   (currencies.length ? currencies : [{ value: "USD", text: "美金" }, { value: "CNY", text: "人民币" }]).forEach((item) => {
     const option = document.createElement("option");
     option.value = item.value;
-    option.textContent = item.text || item.value;
+    option.textContent = item.value === "CNY" ? tr("cny") : tr("usd");
     els.currencySelect.appendChild(option);
   });
   currencyButtons();
@@ -769,12 +799,12 @@ function renderState(state){
   els.currencySelect.value = state.settings && state.settings.currency || "USD";
   currencyButtons();
 
-  setBadge(state.tone, state.loading ? "sync" : state.status, state);
+  setBadge(state.tone, state.loading ? tr("loading") : tr(state.status), state);
   const unit = safe(state.unit_text, "");
-  const currency = safe(state.currency_text, safe(state.currency, "--")) + unit;
+  const currency = (state.currency === "CNY" ? tr("cny") : tr("usd")) + unit;
   const fx = state.currency === "CNY" ? " · USD/CNY " + rateLabel(state.fx_rate) : "";
   els.routeMeta.textContent = safe(active.source, "--") + " · " + safe(active.symbol || active.secid, "--") + fx;
-  els.assetName.textContent = safe(active.text, "--");
+  els.assetName.textContent = assetDisplayName(active);
   els.assetMeta.textContent = (groupText[active.group] || safe(active.group, "--")) + " · " + currency;
   els.priceText.textContent = safe(state.price_text, "--");
   els.changeText.textContent = safe(state.change_text, "--") + "  " + safe(state.change_pct_text, "--%");
@@ -784,7 +814,7 @@ function renderState(state){
   els.changeText.style.color = trendColor;
   els.changeText.style.background = toneSoftColor(state, state.tone);
   const maText = maLabel(els.maSelect && els.maSelect.value);
-  const maSuffix = maText === "不显示" ? "" : " · " + maText;
+  const maSuffix = maText === tr("off") ? "" : " · " + maText;
   els.statInterval.textContent = safe(state.settings && state.settings.interval, "--") + " · " + modeLabel(state.settings && state.settings.mode) + maSuffix + " · " + safe(state.currency, "--") + unit;
   els.statHigh.textContent = safe(state.max_price_text, "--");
   els.statLow.textContent = safe(state.min_price_text, "--");
@@ -802,7 +832,7 @@ async function refreshState(){
     renderState(await getJson("/state?_=" + Date.now()));
   }catch(err){
     setBadge("error", "err", null);
-    setHint("状态读取失败：" + err.message, true);
+    setHint(errText.state + err.message, true);
   }finally{
     busy = false;
   }
@@ -810,7 +840,7 @@ async function refreshState(){
 
 async function applySelectedAsset(){
   if(!els.assetSelect.value){
-    setHint("请选择标的", true);
+    setHint(errText.choose, true);
     return;
   }
   const query = new URLSearchParams({
@@ -855,15 +885,15 @@ function syncSourceFields(){
     if(activeGroup === "nasdaq"){
       els.marketSelect.value = "100";
       els.symbolInput.value = "NDX";
-      els.nameInput.value = "纳斯达克";
+      els.nameInput.value = assetDisplayName({id:"nasdaq:100.NDX", text:"纳斯达克", symbol:"NDX"});
     }else if(activeGroup === "metal"){
       els.marketSelect.value = "101";
       els.symbolInput.value = "GC00Y";
-      els.nameInput.value = "COMEX黄金";
+      els.nameInput.value = assetDisplayName({id:"metal:101.GC00Y", text:"COMEX黄金", symbol:"GC00Y"});
     }else{
       els.marketSelect.value = "1";
       els.symbolInput.value = "000300";
-      els.nameInput.value = "沪深300";
+      els.nameInput.value = assetDisplayName({id:"ashare:1.000300", text:"沪深300", symbol:"000300"});
     }
   }
 }
@@ -880,7 +910,7 @@ document.querySelectorAll("[data-group]").forEach((button) => {
       els.assetSelect.selectedIndex = 0;
     }
     syncSourceFields();
-    applySelectedAsset().catch((err) => setHint("切换失败：" + err.message, true));
+    applySelectedAsset().catch((err) => setHint(errText.switch + err.message, true));
   });
 });
 
@@ -888,15 +918,15 @@ document.querySelectorAll("[data-currency]").forEach((button) => {
   button.addEventListener("click", () => {
     els.currencySelect.value = button.dataset.currency || "USD";
     currencyButtons();
-    applySelectedAsset().catch((err) => setHint("切换失败：" + err.message, true));
+    applySelectedAsset().catch((err) => setHint(errText.switch + err.message, true));
   });
 });
 
 document.getElementById("applyCustom").addEventListener("click", () => {
-  applyCustom().catch((err) => setHint("自定义失败：" + err.message, true));
+  applyCustom().catch((err) => setHint(errText.custom + err.message, true));
 });
 document.getElementById("refreshNow").addEventListener("click", () => {
-  refreshNow().catch((err) => setHint("刷新失败：" + err.message, true));
+  refreshNow().catch((err) => setHint(errText.refresh + err.message, true));
 });
 document.getElementById("clearCustom").addEventListener("click", () => {
   els.symbolInput.value = "";
@@ -905,16 +935,16 @@ document.getElementById("clearCustom").addEventListener("click", () => {
 });
 els.sourceSelect.addEventListener("change", syncSourceFields);
 els.assetSelect.addEventListener("change", () => {
-  applySelectedAsset().catch((err) => setHint("切换失败：" + err.message, true));
+  applySelectedAsset().catch((err) => setHint(errText.switch + err.message, true));
 });
 els.intervalSelect.addEventListener("change", () => {
-  applySelectedAsset().catch((err) => setHint("切换失败：" + err.message, true));
+  applySelectedAsset().catch((err) => setHint(errText.switch + err.message, true));
 });
 els.modeSelect.addEventListener("change", () => {
-  applySelectedAsset().catch((err) => setHint("切换失败：" + err.message, true));
+  applySelectedAsset().catch((err) => setHint(errText.switch + err.message, true));
 });
 els.maSelect.addEventListener("change", () => {
-  applySelectedAsset().catch((err) => setHint("切换失败：" + err.message, true));
+  applySelectedAsset().catch((err) => setHint(errText.switch + err.message, true));
 });
 window.addEventListener("resize", () => current && drawChart(current));
 
@@ -935,6 +965,7 @@ function Web.new(backend, opts)
     backend = backend,
     route_base = opts.route_base or "/btc",
     api_prefix = (opts.route_base or "/btc") .. "/api",
+    language = opts.language or "zh-CN",
     routes = {},
     started = false,
   }
@@ -959,7 +990,7 @@ function Web.new(backend, opts)
 
   -- 页面入口响应。
   function self:route_index(req)
-    return text_response("200 OK", "text/html; charset=utf-8", build_html(self.api_prefix))
+    return text_response("200 OK", "text/html; charset=utf-8", build_html(self.api_prefix, self.language))
   end
 
   -- 状态 API。

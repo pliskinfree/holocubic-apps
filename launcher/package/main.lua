@@ -14,8 +14,81 @@ local OFFSCREEN_LEFT_X = -125
 local OFFSCREEN_RIGHT_X = SCREEN_W + 45
 local ANIM_MS = 360
 
+local SETTINGS_PATH = "/sd/apps/settings.json"
+local DEFAULT_LANGUAGE = "zh-CN"
+
+local function normalize_language(value)
+  local text = tostring(value or ""):gsub("_", "-")
+  if text == "en" or text:match("^en%-") then return "en" end
+  if text == "ja" or text:match("^ja%-") then return "ja" end
+  if text == "zh-TW" or text == "zh-Hant" or text:match("^zh%-Hant") or text:match("^zh%-HK") then return "zh-TW" end
+  return DEFAULT_LANGUAGE
+end
+
+local function read_language()
+  if not file or not file.getcontents then return DEFAULT_LANGUAGE end
+  local ok, raw = pcall(function() return file.getcontents(SETTINGS_PATH) end)
+  if not ok or type(raw) ~= "string" or raw == "" then return DEFAULT_LANGUAGE end
+  local codec = rawget(_G, "json") or rawget(_G, "sjson")
+  if not codec or not codec.decode then return DEFAULT_LANGUAGE end
+  local decoded, doc = pcall(function() return codec.decode(raw) end)
+  if not decoded or type(doc) ~= "table" then return DEFAULT_LANGUAGE end
+  return normalize_language(doc.language or doc.locale or doc.lang)
+end
+
+local LANGUAGE = read_language()
+local UI_TEXT = {
+  ["zh-CN"] = { no_apps = "暂无应用", loading = "正在启动" },
+  en = { no_apps = "NO APPS", loading = "Starting" },
+  ja = { no_apps = "アプリなし", loading = "起動中" },
+  ["zh-TW"] = { no_apps = "暫無應用", loading = "正在啟動" },
+}
+
+local UI_FONT_PATHS = {
+  ["zh-CN"] = "/sd/apps/launcher/font/launcher_ui_zh_cn_16.bin",
+  ja = "/sd/apps/launcher/font/launcher_ui_ja_16.bin",
+  ["zh-TW"] = "/sd/apps/launcher/font/launcher_ui_zh_tw_16.bin",
+}
+
 local root = lv_scr_act()
 lv_obj_clean(lv_scr_act())
+if rawget(_G, "LAUNCHER_UI_FONT_HANDLE") and lv_font_free then
+  pcall(function() lv_font_free(_G.LAUNCHER_UI_FONT_HANDLE) end)
+end
+_G.LAUNCHER_UI_FONT_HANDLE = nil
+
+-- 先让轻量启动页完成一次刷新，再加载当前语言的大字库。
+local splash_bg = lv_obj_create(root)
+lv_obj_set_pos(splash_bg, 0, 0)
+lv_obj_set_size(splash_bg, SCREEN_W, SCREEN_H)
+lv_obj_set_style_bg_color(splash_bg, 0x000000, LV_PART_MAIN)
+lv_obj_set_style_bg_opa(splash_bg, 255, LV_PART_MAIN)
+lv_obj_set_style_border_width(splash_bg, 0, LV_PART_MAIN)
+local splash_label = lv_label_create(root)
+lv_label_set_text(splash_label, "Launcher")
+lv_obj_set_style_text_color(splash_label, 0xFFFFFF, LV_PART_MAIN)
+lv_obj_set_style_text_font(splash_label, LV_FONT_MONTSERRAT_16, LV_PART_MAIN)
+lv_obj_center(splash_label)
+if lv_refr_now then
+  pcall(function() lv_refr_now(nil) end)
+elseif lv_timer_handler then
+  pcall(lv_timer_handler)
+elseif lv_task_handler then
+  pcall(lv_task_handler)
+end
+
+local UI_FONT = LV_FONT_MONTSERRAT_16
+local UI_FONT_HANDLE = nil
+local ui_font_path = UI_FONT_PATHS[LANGUAGE]
+if ui_font_path and lv_font_load then
+  local ok, handle = pcall(function() return lv_font_load(ui_font_path) end)
+  if ok and type(handle) == "number" and handle > 0 then
+    UI_FONT = handle
+    UI_FONT_HANDLE = handle
+    _G.LAUNCHER_UI_FONT_HANDLE = handle
+  end
+end
+lv_obj_clean(root)
 
 local STATE = {
   apps = {},
@@ -463,7 +536,7 @@ local function render(dir)
   local center_item = current_item()
 
   if count <= 0 or not center_item then
-    set_triplet_content(nil, { name = "NO APPS" }, nil)
+    set_triplet_content(nil, { name = (UI_TEXT[LANGUAGE] or UI_TEXT.en).no_apps }, nil)
     set_static_positions()
     STATE.animating = false
     return
@@ -567,7 +640,7 @@ local function build_ui()
   lv_obj_set_size(UI.center_label, ICON_SIZE, LABEL_H)
   lv_obj_set_pos(UI.center_label, CENTER_X, ICON_Y + ICON_SIZE + LABEL_GAP)
   lv_label_set_long_mode(UI.center_label, LV_LABEL_LONG_CLIP)
-  style_text(UI.center_label, 0xFFFFFF, LV_FONT_MONTSERRAT_16, LV_TEXT_ALIGN_CENTER)
+  style_text(UI.center_label, 0xFFFFFF, UI_FONT, LV_TEXT_ALIGN_CENTER)
 
   UI.left_icon = lv_obj_create(root)
   lv_obj_set_size(UI.left_icon, ICON_SIZE, ICON_SIZE)
@@ -579,7 +652,7 @@ local function build_ui()
   lv_obj_set_size(UI.left_label, ICON_SIZE, LABEL_H)
   lv_obj_set_pos(UI.left_label, LEFT_X, ICON_Y + ICON_SIZE + LABEL_GAP)
   lv_label_set_long_mode(UI.left_label, LV_LABEL_LONG_CLIP)
-  style_text(UI.left_label, 0x808080, LV_FONT_MONTSERRAT_16, LV_TEXT_ALIGN_CENTER)
+  style_text(UI.left_label, 0x808080, UI_FONT, LV_TEXT_ALIGN_CENTER)
 
   UI.right_icon = lv_obj_create(root)
   lv_obj_set_size(UI.right_icon, ICON_SIZE, ICON_SIZE)
@@ -591,7 +664,7 @@ local function build_ui()
   lv_obj_set_size(UI.right_label, ICON_SIZE, LABEL_H)
   lv_obj_set_pos(UI.right_label, RIGHT_X, ICON_Y + ICON_SIZE + LABEL_GAP)
   lv_label_set_long_mode(UI.right_label, LV_LABEL_LONG_CLIP)
-  style_text(UI.right_label, 0x808080, LV_FONT_MONTSERRAT_16, LV_TEXT_ALIGN_CENTER)
+  style_text(UI.right_label, 0x808080, UI_FONT, LV_TEXT_ALIGN_CENTER)
 end
 
 build_ui()

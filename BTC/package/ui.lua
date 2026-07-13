@@ -10,12 +10,6 @@ local ALIGN_CENTER = rawget(_G, "LV_TEXT_ALIGN_CENTER") or 1
 local LONG_CLIP = rawget(_G, "LV_LABEL_LONG_CLIP") or 2
 local CANVAS_FMT = rawget(_G, "LV_IMG_CF_TRUE_COLOR") or rawget(_G, "CANVAS_FMT_TRUE_COLOR")
 local CANVAS_FMT_TEXT = CANVAS_FMT and tostring(CANVAS_FMT) or "default"
-local CN_FONT_PATHS = {
-  "/sd/apps/btc/font/noto_sans_sc_medium_12_2bpp_common3000.bin",
-  "/sd/apps/font/12chinese.bin",
-  "/sd/apps/font/16chinese.bin",
-  "/sd/fonts/UI_FONT_16.bin",
-}
 
 local C = {
   bg = 0x000000,
@@ -88,18 +82,15 @@ local function path_exists(path)
   return false
 end
 
--- 加载标题用中文字体。设备暂无 12 号时退到 16 号小字库。
-local function load_cn_font()
+-- 启动页已显示后，仅加载当前语言所需的字库。
+local function load_ui_font(path)
   if not lv_font_load then
     return nil, ""
   end
-  for i = 1, #CN_FONT_PATHS do
-    local path = CN_FONT_PATHS[i]
-    if path_exists(path) then
-      local ok, handle = pcall(function() return lv_font_load(path) end)
-      if ok and type(handle) == "number" and handle > 0 then
-        return handle, path
-      end
+  if path and path_exists(path) then
+    local ok, handle = pcall(function() return lv_font_load(path) end)
+    if ok and type(handle) == "number" and handle > 0 then
+      return handle, path
     end
   end
   return nil, ""
@@ -414,9 +405,10 @@ local function chart_error_handler(err)
 end
 
 -- 构造 UI 实例。
-function Ui.new(backend)
+function Ui.new(backend, i18n)
   local self = {
     backend = backend,
+    i18n = i18n,
     root = nil,
     bg = nil,
     title = nil,
@@ -429,8 +421,8 @@ function Ui.new(backend)
     chart = nil,
     footer_left = nil,
     footer_right = nil,
-    cn_font = nil,
-    cn_font_path = "",
+    ui_font = nil,
+    ui_font_path = "",
     last_chart_key = "",
   }
 
@@ -443,7 +435,27 @@ function Ui.new(backend)
     if not self.root then
       return
     end
-    self.cn_font, self.cn_font_path = load_cn_font()
+
+    local splash = lv_obj_create(self.root)
+    lv_obj_set_pos(splash, 0, 0)
+    lv_obj_set_size(splash, W, H)
+    lv_obj_set_style_bg_color(splash, C.bg, MAIN_STYLE)
+    lv_obj_set_style_bg_opa(splash, 255, MAIN_STYLE)
+    lv_obj_set_style_border_width(splash, 0, MAIN_STYLE)
+    local splash_title = lv_label_create(self.root)
+    lv_label_set_text(splash_title, "Ticker")
+    label_style(splash_title, FONT_16, C.text, W, ALIGN_CENTER)
+    lv_obj_set_pos(splash_title, 0, 102)
+    if lv_refr_now then
+      pcall(function() lv_refr_now(nil) end)
+    elseif lv_timer_handler then
+      pcall(lv_timer_handler)
+    elseif lv_task_handler then
+      pcall(lv_task_handler)
+    end
+
+    self.ui_font, self.ui_font_path = load_ui_font(self.i18n and self.i18n.font_path or nil)
+    if lv_obj_clean then pcall(function() lv_obj_clean(self.root) end) end
 
     self.bg = lv_obj_create(self.root)
     lv_obj_set_pos(self.bg, 0, 0)
@@ -457,11 +469,11 @@ function Ui.new(backend)
 
     self.title = lv_label_create(self.root)
     lv_obj_set_pos(self.title, 12, 13)
-    label_style(self.title, self.cn_font or FONT_12, C.sub, 194)
+    label_style(self.title, self.ui_font or FONT_12, C.sub, 194)
 
     self.status = lv_label_create(self.root)
     lv_obj_set_pos(self.status, 222, 15)
-    label_style(self.status, FONT_12, C.dim, 86, ALIGN_RIGHT)
+    label_style(self.status, self.ui_font or FONT_12, C.dim, 86, ALIGN_RIGHT)
 
     self.price = lv_label_create(self.root)
     lv_obj_set_pos(self.price, 12, 32)
@@ -473,11 +485,11 @@ function Ui.new(backend)
 
     self.detail = lv_label_create(self.root)
     lv_obj_set_pos(self.detail, 168, 64)
-    label_style(self.detail, FONT_12, C.dim, 140, ALIGN_RIGHT)
+    label_style(self.detail, self.ui_font or FONT_12, C.dim, 140, ALIGN_RIGHT)
 
     self.updated = lv_label_create(self.root)
     lv_obj_set_pos(self.updated, 12, 80)
-    label_style(self.updated, FONT_10, C.dim, 296)
+    label_style(self.updated, self.ui_font or FONT_10, C.dim, 296)
 
     self.chart_card = lv_obj_create(self.root)
     lv_obj_set_pos(self.chart_card, CHART_X, CHART_Y)
@@ -499,7 +511,7 @@ function Ui.new(backend)
 
     self.footer_left = lv_label_create(self.root)
     lv_obj_set_pos(self.footer_left, 12, 219)
-    label_style(self.footer_left, FONT_10, C.dim, 145)
+    label_style(self.footer_left, self.ui_font or FONT_10, C.dim, 145)
 
     self.footer_right = lv_label_create(self.root)
     lv_obj_set_pos(self.footer_right, 170, 219)
@@ -515,7 +527,7 @@ function Ui.new(backend)
     local explicit = canvas_begin(self.chart)
     local ok = true
     ok = canvas_fill(self.chart, C.panel) and ok
-    ok = draw_text(self.chart, 0, 42, CANVAS_W, text or "Waiting", color or C.sub, ALIGN_CENTER, 14) and ok
+    ok = draw_text(self.chart, 0, 42, CANVAS_W, text or (self.i18n and self.i18n:t("waiting") or "Waiting"), color or C.sub, ALIGN_CENTER, self.ui_font or 14) and ok
     ok = canvas_end(self.chart, explicit) and ok
     return ok
   end
@@ -529,7 +541,7 @@ function Ui.new(backend)
     local points = snap.points or {}
     local red_up = red_up_market(snap)
     if #points < 1 then
-      return self:draw_empty(snap.error ~= "" and snap.error or "Waiting data", tone_color(snap.tone, red_up))
+      return self:draw_empty(snap.error ~= "" and snap.error or (self.i18n and self.i18n:t("waiting") or "Waiting data"), tone_color(snap.tone, red_up))
     end
 
     local minp = tonumber(snap.min_price)
@@ -548,7 +560,7 @@ function Ui.new(backend)
       end
     end
     if not minp or not maxp then
-      return self:draw_empty("No price", C.sub)
+      return self:draw_empty(self.i18n and self.i18n:t("no_price") or "No price", C.sub)
     end
     if math.abs(maxp - minp) < 0.000001 then
       maxp = maxp + 1
@@ -595,8 +607,9 @@ function Ui.new(backend)
     end
     local snap = self.backend:snapshot()
     local active = snap.active or {}
-    local title = active.text or active.symbol or "Market"
-    local status = snap.loading and "SYNC" or string.upper(tostring(snap.status or "idle"))
+    local title = self.i18n and self.i18n:asset_name(active) or active.text or active.symbol or "Market"
+    local status = snap.loading and (self.i18n and self.i18n:t("sync") or "SYNC")
+      or (self.i18n and self.i18n:status(snap.status) or string.upper(tostring(snap.status or "idle")))
     local trend_color = tone_color(snap.tone, red_up_market(snap))
 
     set_text(self.title, title)
@@ -613,8 +626,9 @@ function Ui.new(backend)
     local unit = tostring(snap.unit_text or "")
     local ma = ma_text(snap.settings and snap.settings.ma_period)
     local ma_suffix = ma ~= "" and ("  " .. ma) or ""
-    set_text(self.detail, (snap.settings.interval or "--") .. "  " .. mode_text(mode) .. ma_suffix .. "  " .. (snap.currency or "") .. unit)
-    set_text(self.updated, snap.error ~= "" and snap.error or ("UPD " .. tostring(snap.now_text or snap.updated_text or "--")))
+    local localized_mode = mode == "candle" and "K" or (self.i18n and self.i18n:t("line") or mode_text(mode))
+    set_text(self.detail, (snap.settings.interval or "--") .. "  " .. localized_mode .. ma_suffix .. "  " .. (snap.currency or "") .. unit)
+    set_text(self.updated, snap.error ~= "" and snap.error or ((self.i18n and self.i18n:t("updated") or "UPD") .. " " .. tostring(snap.now_text or snap.updated_text or "--")))
     set_color(self.updated, snap.error ~= "" and C.warn or C.dim)
 
     local chart_key = tostring(snap.settings.asset) .. "|" .. tostring(snap.settings.interval) .. "|"
@@ -631,7 +645,7 @@ function Ui.new(backend)
       end
     end
 
-    set_text(self.footer_left, "pts " .. tostring(#(snap.points or {})) .. "  " .. mode_text(mode) .. (ma ~= "" and (" " .. ma) or ""))
+    set_text(self.footer_left, (self.i18n and self.i18n:t("points") or "pts") .. " " .. tostring(#(snap.points or {})) .. "  " .. localized_mode .. (ma ~= "" and (" " .. ma) or ""))
     if last_draw_error ~= "" then
       set_text(self.footer_right, "ERR " .. tostring(last_draw_error):sub(1, 18))
     else
@@ -644,11 +658,11 @@ function Ui.new(backend)
     if lv_clear then
       pcall(function() lv_clear() end)
     end
-    if self.cn_font and lv_font_free then
-      pcall(function() lv_font_free(self.cn_font) end)
+    if self.ui_font and lv_font_free then
+      pcall(function() lv_font_free(self.ui_font) end)
     end
-    self.cn_font = nil
-    self.cn_font_path = ""
+    self.ui_font = nil
+    self.ui_font_path = ""
     self.root = nil
   end
 

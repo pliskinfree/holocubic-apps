@@ -13,11 +13,9 @@ local function load_module(name)
 end
 
 local Backend = load_module("backend")
-local Ui = load_module("ui")
-local Web = load_module("web")
 
 local app_obj = {
-  VERSION = "2026-06-28-btc-markets-v1",
+  VERSION = "2026-07-10-btc-markets-eager-http-v3",
   APP_ID = "btc",
   APP_DIR = APP_DIR,
   route_base = (app and app.route_base and app.route_base()) or "/btc",
@@ -35,9 +33,16 @@ app_obj.backend = Backend.new({
 app_obj.backend:queue_refresh()
 app_obj.backend:tick()
 
-app_obj.ui = Ui.new(app_obj.backend)
+-- HTTP 已经启动，再解析 Web/UI 模块并加载大字体。
+local I18n = load_module("i18n")
+local Ui = load_module("ui")
+local Web = load_module("web")
+
+app_obj.i18n = I18n
+app_obj.ui = Ui.new(app_obj.backend, I18n)
 app_obj.web = Web.new(app_obj.backend, {
   route_base = app_obj.route_base,
+  language = I18n.language,
 })
 app_obj.input = {
   last_key_ms = 0,
