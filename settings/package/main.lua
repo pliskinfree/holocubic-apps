@@ -238,7 +238,16 @@ local function clock_ms()
       return value
     end
   end
-  return math.floor(os.clock() * 1000)
+  if type(millis) == "function" then
+    local ok, value = pcall(millis)
+    if ok and type(value) == "number" then
+      return value
+    end
+  end
+  if os and type(os.clock) == "function" then
+    return math.floor(os.clock() * 1000)
+  end
+  return 0
 end
 
 local function json_encode(value)
