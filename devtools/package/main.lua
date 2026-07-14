@@ -1,15 +1,18 @@
 -- DevTools service: SD file manager + dedicated DevRun code runner.
 
-if _G.DEVTOOLS and _G.DEVTOOLS.stop then
-  pcall(function() _G.DEVTOOLS.stop("reload") end)
+local PREVIOUS_DEVTOOLS = _G.DEVTOOLS
+if PREVIOUS_DEVTOOLS and PREVIOUS_DEVTOOLS.stop then
+  pcall(function() PREVIOUS_DEVTOOLS.stop("reload") end)
 end
 
 DEVTOOLS = {}
 local APP = DEVTOOLS
 
-APP.VERSION = "2026-07-14-devtools-folder-transfer-v5"
+APP.VERSION = "2026-07-15-devtools-folder-transfer-v6"
 APP.ROOT_PATH = "/sd"
 APP.APPS_PATH = "/sd/apps"
+APP.SERVICE_ID = "devtools"
+APP.SERVICE_MAIN = "/sd/apps/devtools/main.lua"
 APP.RUN_APP_ID = "devrun"
 APP.RUN_APP_DIR = "/sd/apps/devrun"
 APP.RUN_APP_MAIN = "/sd/apps/devrun/main.lua"
@@ -27,6 +30,20 @@ APP.logs = {}
 APP.request_count = 0
 APP.last_action = "idle"
 APP.shutting_down = false
+local previous_generation = type(PREVIOUS_DEVTOOLS) == "table" and tonumber(PREVIOUS_DEVTOOLS.generation) or 0
+local global_generation = tonumber(_G.DEVTOOLS_GENERATION) or 0
+APP.generation = math.max(previous_generation, global_generation) + 1
+_G.DEVTOOLS_GENERATION = APP.generation
+APP.started_at = 0
+if tmr and type(tmr.now) == "function" then
+  local ok_now, now = pcall(tmr.now)
+  if ok_now then
+    APP.started_at = tonumber(now) or 0
+  end
+end
+APP.reload_pending = false
+APP.reload_error = ""
+APP.reload_timer = nil
 
 local function text_or(value, fallback)
   if value == nil then
@@ -640,8 +657,83 @@ function APP.api_info()
     preview_media_limit = APP.PREVIEW_MEDIA_LIMIT,
     run_app_id = APP.RUN_APP_ID,
     run_app_main = APP.RUN_APP_MAIN,
+    generation = APP.generation,
+    started_at = APP.started_at,
+    reload_available = tmr and type(tmr.create) == "function" and app and type(app.start_service) == "function" or false,
+    reload_pending = APP.reload_pending,
+    reload_error = APP.reload_error,
     request_count = APP.request_count,
     last_action = APP.last_action
+  })
+end
+
+function APP.api_reload()
+  if APP.reload_pending then
+    return error_response("409 Conflict", "DevTools reload already pending")
+  end
+  if APP.shutting_down then
+    return error_response("409 Conflict", "DevTools is shutting down")
+  end
+
+  local st = file.stat(APP.SERVICE_MAIN)
+  if not st or st.is_dir then
+    return error_response("404 Not Found", "DevTools main.lua not found")
+  end
+  if not (tmr and type(tmr.create) == "function") then
+    return error_response("501 Not Implemented", "timer API unavailable; reboot the device to apply updates")
+  end
+  if not (app and type(app.start_service) == "function") then
+    return error_response("501 Not Implemented", "service restart API unavailable; reboot the device to apply updates")
+  end
+
+  if type(loadfile) == "function" then
+    local ok_compile, chunk, compile_err = pcall(loadfile, APP.SERVICE_MAIN)
+    if not ok_compile then
+      return error_response("422 Unprocessable Entity", "DevTools compile check failed: " .. text_or(chunk, "unknown error"))
+    end
+    if type(chunk) ~= "function" then
+      return error_response("422 Unprocessable Entity", "DevTools compile check failed: " .. text_or(compile_err, "unknown error"))
+    end
+  end
+
+  local timer = tmr.create()
+  if not timer then
+    return error_response("500 Internal Server Error", "failed to create reload timer")
+  end
+
+  APP.reload_pending = true
+  APP.reload_error = ""
+  APP.reload_timer = timer
+  local ok_alarm, alarm_err = pcall(function()
+    timer:alarm(250, tmr.ALARM_SINGLE or 0, function()
+      if APP.reload_timer == timer then
+        APP.reload_timer = nil
+      end
+      pcall(function() timer:unregister() end)
+      local ok_reload, restarted, reload_err = pcall(app.start_service, APP.SERVICE_ID)
+      if not ok_reload or not restarted then
+        APP.reload_pending = false
+        APP.reload_error = text_or(ok_reload and reload_err or restarted, "service restart failed")
+        print("[devtools] reload failed", APP.reload_error)
+      end
+    end)
+  end)
+  if not ok_alarm then
+    APP.reload_pending = false
+    APP.reload_timer = nil
+    pcall(function() timer:unregister() end)
+    return error_response("500 Internal Server Error", "failed to schedule reload: " .. text_or(alarm_err, "unknown error"))
+  end
+
+  mark_action("reload", APP.SERVICE_MAIN)
+  update_screen()
+  return json_response("202 Accepted", {
+    ok = true,
+    scheduled = true,
+    reload_in_ms = 250,
+    service_id = APP.SERVICE_ID,
+    version = APP.VERSION,
+    generation = APP.generation
   })
 end
 
@@ -1063,6 +1155,8 @@ button.warn{background:#fff6e8;border-color:#efdab4;color:var(--warn)}
 h1{margin:0;font-size:26px;line-height:1.1;letter-spacing:0}
 .sub{color:var(--muted);margin-top:4px}
 .pills,.toolbar,.row,.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.top-actions{justify-content:flex-end}
+.top-actions button{min-height:32px;padding:5px 10px}
 .pill{
   display:inline-flex;
   min-height:30px;
@@ -1251,6 +1345,7 @@ h1{margin:0;font-size:26px;line-height:1.1;letter-spacing:0}
 @media(max-width:640px){
   .app{padding:12px}
   .topbar{grid-template-columns:1fr}
+  .top-actions{justify-content:flex-start}
   .file-row{grid-template-columns:1fr}
   .file-actions{justify-content:flex-start}
   .stats{grid-template-columns:1fr}
@@ -1264,10 +1359,11 @@ h1{margin:0;font-size:26px;line-height:1.1;letter-spacing:0}
       <h1>Cubic DevTools</h1>
       <div class="sub">文件管理 + DevRun 代码运行器。编辑器只写入 <strong>__RUN_APP_ID__</strong>，不会修改已有 app 源码。</div>
     </div>
-    <div class="pills">
+    <div class="pills top-actions">
       <span class="pill" id="badgeVersion">--</span>
       <span class="pill" id="badgeDir">/sd</span>
       <span class="pill" id="badgeRun">DevRun</span>
+      <button id="btnReload" type="button" class="secondary" title="重启 DevTools 服务并读取 SD 卡上的新版 main.lua">应用更新</button>
     </div>
   </section>
 
@@ -1608,6 +1704,39 @@ async function loadInfo(){
   qs("badgeVersion").textContent = data.version || "--";
   qs("badgeRun").textContent = data.run_app_id || RUN_APP_ID;
   qs("runPath").textContent = data.run_app_main || "/sd/apps/" + RUN_APP_ID + "/main.lua";
+  qs("btnReload").disabled = data.reload_available === false;
+}
+async function reloadDevTools(){
+  if(!window.confirm("重新读取 /sd/apps/devtools/main.lua 并更新当前管理页面？")) return;
+  const button = qs("btnReload");
+  const previousVersion = serverInfo.version || "";
+  const previousGeneration = Number(serverInfo.generation || 0);
+  const previousStartedAt = Number(serverInfo.started_at || 0);
+  button.disabled = true;
+  showStatus("正在应用 DevTools 更新...", false);
+  try{
+    const accepted = await parseJson(await fetch(apiUrl("/api/reload"), {method:"POST"}));
+    const deadline = Date.now() + 12000;
+    await new Promise(resolve => window.setTimeout(resolve, Number(accepted.reload_in_ms || 250) + 150));
+    while(Date.now() < deadline){
+      try{
+        const res = await fetch(apiUrl("/api/info", {_reload:Date.now()}));
+        const info = await parseJson(res);
+        const generationChanged = Number(info.generation || 0) !== previousGeneration;
+        const startedAtChanged = Number(info.started_at || 0) !== previousStartedAt;
+        const versionChanged = String(info.version || "") !== previousVersion;
+        if(generationChanged || startedAtChanged || versionChanged){
+          showStatus("DevTools 已更新，正在载入新页面...", false);
+          window.location.reload();
+          return;
+        }
+      }catch(_){}
+      await new Promise(resolve => window.setTimeout(resolve, 350));
+    }
+    throw new Error("等待 DevTools 更新超时；若服务无法访问，请重启设备恢复");
+  }finally{
+    button.disabled = false;
+  }
 }
 async function loadDir(path){
   const target = path || currentDir || serverInfo.root_path;
@@ -2047,6 +2176,7 @@ async function saveRunCode(run){
   return data;
 }
 qs("btnRefresh").onclick = () => loadDir(qs("dirPath").value.trim() || serverInfo.root_path).catch(err=>showStatus(err.message,true));
+qs("btnReload").onclick = () => reloadDevTools().catch(err=>showStatus(err.message,true));
 qs("btnUp").onclick = () => loadDir(parentPath(currentDir)).catch(err=>showStatus(err.message,true));
 qs("btnNewFolder").onclick = () => createFolder().catch(err=>showStatus(err.message,true));
 qs("btnChooseFiles").onclick = () => {qs("uploadPicker").removeAttribute("open"); qs("fileInput").click()};
@@ -2133,6 +2263,12 @@ function APP.stop(reason)
     return
   end
   APP.shutting_down = true
+  if APP.reload_timer then
+    local timer = APP.reload_timer
+    APP.reload_timer = nil
+    pcall(function() timer:stop() end)
+    pcall(function() timer:unregister() end)
+  end
   APP.unregister_all_routes()
   print("[devtools] stop", text_or(reason, ""))
 end
@@ -2163,6 +2299,7 @@ APP.register_route(httpd.GET, APP.API_PREFIX .. "/code/read", APP.api_read_run_c
 
 APP.register_route(httpd.POST, APP.API_PREFIX .. "/mkdir", APP.api_mkdir)
 APP.register_route(httpd.POST, APP.API_PREFIX .. "/rename", APP.api_rename)
+APP.register_route(httpd.POST, APP.API_PREFIX .. "/reload", APP.api_reload)
 APP.register_route(httpd.POST, APP.API_PREFIX .. "/code/save", APP.route_save_code)
 APP.register_route(httpd.POST, APP.API_PREFIX .. "/code/run", APP.route_run_code)
 
