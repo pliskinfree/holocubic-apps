@@ -7,7 +7,7 @@ end
 DEVTOOLS = {}
 local APP = DEVTOOLS
 
-APP.VERSION = "2026-07-14-devtools-folder-transfer-v4"
+APP.VERSION = "2026-07-14-devtools-folder-transfer-v5"
 APP.ROOT_PATH = "/sd"
 APP.APPS_PATH = "/sd/apps"
 APP.RUN_APP_ID = "devrun"
@@ -1014,6 +1014,40 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 button.secondary{background:#eef5ff;border-color:#cddcff;color:#1f4aa5}
 button.danger{background:#fff1f4;border-color:#f3c7d0;color:var(--danger)}
 button.warn{background:#fff6e8;border-color:#efdab4;color:var(--warn)}
+.upload-picker{position:relative}
+.upload-picker>summary{
+  list-style:none;
+  min-height:40px;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  border:1px solid var(--accent);
+  border-radius:10px;
+  background:var(--accent);
+  color:#fff;
+  padding:8px 12px;
+  cursor:pointer;
+  user-select:none;
+}
+.upload-picker>summary::-webkit-details-marker{display:none}
+.upload-picker>summary::after{content:"▾";font-size:11px;transition:transform .14s ease}
+.upload-picker[open]>summary::after{transform:rotate(180deg)}
+.upload-picker>summary:hover{box-shadow:0 8px 18px rgba(37,99,235,.18)}
+.upload-options{
+  position:absolute;
+  z-index:30;
+  top:calc(100% + 6px);
+  left:0;
+  min-width:150px;
+  display:grid;
+  gap:6px;
+  padding:7px;
+  border:1px solid var(--line);
+  border-radius:11px;
+  background:#fff;
+  box-shadow:var(--shadow);
+}
+.upload-options button{width:100%;text-align:left;white-space:nowrap}
 .app{max-width:1440px;margin:0 auto;padding:18px}
 .topbar{
   display:grid;
@@ -1042,7 +1076,7 @@ h1{margin:0;font-size:26px;line-height:1.1;letter-spacing:0}
 }
 .layout{
   display:grid;
-  grid-template-columns:360px minmax(0,1fr);
+  grid-template-columns:420px minmax(0,1fr);
   gap:16px;
   margin-top:16px;
 }
@@ -1250,8 +1284,13 @@ h1{margin:0;font-size:26px;line-height:1.1;letter-spacing:0}
         <div class="toolbar">
           <button id="btnUp" type="button">上级</button>
           <button id="btnNewFolder" type="button" class="warn">新目录</button>
-          <button id="btnChooseUpload" type="button" class="primary">上传文件</button>
-          <button id="btnChooseFolder" type="button">上传文件夹</button>
+          <details id="uploadPicker" class="upload-picker">
+            <summary id="btnChooseUpload">上传</summary>
+            <div class="upload-options">
+              <button id="btnChooseFiles" type="button">上传文件</button>
+              <button id="btnChooseFolder" type="button">上传文件夹</button>
+            </div>
+          </details>
         </div>
         <div class="row" style="margin-top:10px"><input id="dirPath" class="path-box" value="/sd"></div>
         <div class="row" style="margin-top:8px"><input id="searchInput" class="search-box" placeholder="搜索当前目录"></div>
@@ -1393,6 +1432,12 @@ function parentPath(path){
 }
 function joinPath(dir, name){
   return dir === serverInfo.root_path ? serverInfo.root_path + "/" + name : dir + "/" + name;
+}
+function validateEntryName(name){
+  const value = String(name || "").trim();
+  if(!value) throw new Error("名称不能为空");
+  if(value === "." || value === ".." || /[\\/\0]/.test(value)) throw new Error("名称不能包含路径分隔符或特殊目录名");
+  return value;
 }
 function normalizeRelativePath(path){
   const raw = String(path || "").replace(/\\/g, "/").replace(/^\/+/, "");
@@ -1544,11 +1589,14 @@ function renderList(items){
     downBtn.className = "primary";
     downBtn.textContent = "下载";
     downBtn.onclick = ev => {ev.stopPropagation(); setSelected(item); downloadSelected().catch(err=>showStatus(err.message,true))};
+    const renameBtn = document.createElement("button");
+    renameBtn.textContent = "重命名";
+    renameBtn.onclick = ev => {ev.stopPropagation(); setSelected(item); renamePath(item).catch(err=>showStatus(err.message,true))};
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "danger";
     deleteBtn.textContent = "删除";
     deleteBtn.onclick = ev => {ev.stopPropagation(); deletePath(item).catch(err=>showStatus(err.message,true))};
-    actions.append(openBtn, downBtn, deleteBtn);
+    actions.append(openBtn, downBtn, renameBtn, deleteBtn);
     row.append(main, actions);
     box.appendChild(row);
   });
@@ -1755,8 +1803,10 @@ async function downloadSelected(){
   showStatus("已开始流式下载 " + (selectedItem.name || ""), false);
 }
 async function renamePath(item){
-  const nextName = (prompt("输入新名称", item.name || "") || "").trim();
-  if(!nextName || nextName === item.name) return;
+  const entered = prompt("输入新名称", item.name || "");
+  if(entered === null) return;
+  const nextName = validateEntryName(entered);
+  if(nextName === item.name) return;
   const newPath = joinPath(parentPath(item.path), nextName);
   await parseJson(await fetch(apiUrl("/api/rename", {path:item.path, new_path:newPath}), {method:"POST"}));
   if(selectedItem && selectedItem.path === item.path) setSelected(null);
@@ -1773,8 +1823,9 @@ async function deletePath(item){
   showStatus("已删除 " + item.name, false);
 }
 async function createFolder(){
-  const name = (prompt("输入新目录名", "") || "").trim();
-  if(!name) return;
+  const entered = prompt("输入新目录名", "");
+  if(entered === null) return;
+  const name = validateEntryName(entered);
   await parseJson(await fetch(apiUrl("/api/mkdir", {path:joinPath(currentDir, name)}), {method:"POST"}));
   await loadDir(currentDir);
   showStatus("已创建目录 " + name, false);
@@ -1998,10 +2049,11 @@ async function saveRunCode(run){
 qs("btnRefresh").onclick = () => loadDir(qs("dirPath").value.trim() || serverInfo.root_path).catch(err=>showStatus(err.message,true));
 qs("btnUp").onclick = () => loadDir(parentPath(currentDir)).catch(err=>showStatus(err.message,true));
 qs("btnNewFolder").onclick = () => createFolder().catch(err=>showStatus(err.message,true));
-qs("btnChooseUpload").onclick = () => qs("fileInput").click();
+qs("btnChooseFiles").onclick = () => {qs("uploadPicker").removeAttribute("open"); qs("fileInput").click()};
 qs("fileInput").onchange = () => {uploadFiles(qs("fileInput").files).catch(err=>showStatus(err.message,true)); qs("fileInput").value = ""};
-qs("btnChooseFolder").onclick = () => qs("folderInput").click();
+qs("btnChooseFolder").onclick = () => {qs("uploadPicker").removeAttribute("open"); qs("folderInput").click()};
 qs("folderInput").onchange = () => {uploadFiles(qs("folderInput").files).catch(err=>showStatus(err.message,true)); qs("folderInput").value = ""};
+document.addEventListener("click", ev => {const picker = qs("uploadPicker"); if(picker.open && !picker.contains(ev.target)) picker.removeAttribute("open")});
 qs("searchInput").oninput = () => renderList(currentItems);
 qs("sortSelect").onchange = () => renderList(currentItems);
 qs("dirPath").onkeydown = ev => {if(ev.key === "Enter") loadDir(qs("dirPath").value.trim() || serverInfo.root_path).catch(err=>showStatus(err.message,true))};
