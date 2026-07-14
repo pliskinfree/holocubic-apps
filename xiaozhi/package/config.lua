@@ -68,7 +68,7 @@ M.websocket = {
   send_task_core = 0,
   send_queue_depth = 16,
   send_queue_bytes = 65536,
-  send_timeout_ms = 250,
+  send_timeout_ms = 2000,
 }
 
 M.ota = {
