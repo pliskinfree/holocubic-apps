@@ -6620,6 +6620,67 @@ async function loadState(silent){
   }
 }
 
+const STATE_POLL_ACTIVE_MS = 1000;
+const STATE_POLL_IDLE_MS = 10000;
+let statePollTimer = 0;
+let statePollRunning = false;
+
+function hasActiveStateOperation(data){
+  const state = data || {};
+  const firmware = state.firmware_update || {};
+  if(firmware.active || firmware.phase === "rebooting"){
+    return true;
+  }
+  if(state.wifi && state.wifi.sta_connecting){
+    return true;
+  }
+  return appInstallJobsFromState(state).some((job) => {
+    const phase = String(job && job.phase || "");
+    return phase !== "" && phase !== "idle" && !isTerminalAppInstallPhase(phase);
+  });
+}
+
+function stopStatePolling(){
+  if(statePollTimer){
+    clearTimeout(statePollTimer);
+    statePollTimer = 0;
+  }
+}
+
+function scheduleStatePoll(delay){
+  stopStatePolling();
+  if(document.hidden){
+    return;
+  }
+  const wait = Number.isFinite(delay)
+    ? delay
+    : (hasActiveStateOperation(latestSystemState) ? STATE_POLL_ACTIVE_MS : STATE_POLL_IDLE_MS);
+  statePollTimer = window.setTimeout(runStatePoll, wait);
+}
+
+async function runStatePoll(){
+  statePollTimer = 0;
+  if(document.hidden || statePollRunning){
+    scheduleStatePoll();
+    return;
+  }
+  statePollRunning = true;
+  try{
+    await loadState(true);
+  }finally{
+    statePollRunning = false;
+    scheduleStatePoll();
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if(document.hidden){
+    stopStatePolling();
+  }else{
+    scheduleStatePoll(0);
+  }
+});
+
 async function exitToLauncher(){
   await exitCurrentApp(qs("#exitBtn"), "切换中...");
 }
@@ -6885,8 +6946,9 @@ loadDeviceSettings();
 renderMediaLibrary();
 setWifiPasswordVisibility(false);
 loadMediaLibrary({ silent: true });
-loadState(false).catch((err) => showToast(err.message || String(err), true));
-setInterval(() => { loadState(true); }, 2500);
+loadState(false)
+  .catch((err) => showToast(err.message || String(err), true))
+  .finally(() => scheduleStatePoll());
 </script>
 </body>
 </html>
