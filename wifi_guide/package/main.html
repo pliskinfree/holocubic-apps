@@ -5,9 +5,7 @@
 <meta name="viewport" content="width=320,height=240,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>WiFi Setting Guide</title>
 <style>
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 html,
 body {
@@ -16,7 +14,7 @@ body {
   margin: 0;
   overflow: hidden;
   background: #000;
-  color: #fff;
+  color: #f7fbff;
   font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
 }
 
@@ -28,224 +26,257 @@ body {
   background: #000;
 }
 
-.glow {
+.status-dot {
   position: absolute;
-  left: 216px;
-  top: -42px;
-  width: 132px;
-  height: 132px;
-  border-radius: 66px;
-  background: rgba(34, 211, 238, 0.16);
+  left: 14px;
+  top: 13px;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: #22d3ee;
+  box-shadow: 0 0 9px rgba(34, 211, 238, 0.9);
+  animation: breathe 1.8s ease-in-out infinite;
 }
 
-.status {
-  position: absolute;
-  left: 16px;
-  top: 14px;
-  width: 78px;
-  height: 22px;
-  border: 1px solid rgba(255,255,255,0.18);
-  border-radius: 11px;
-  color: #bff7ff;
-  font-size: 11px;
-  line-height: 20px;
-  text-align: center;
-  background: rgba(255,255,255,0.06);
+@keyframes breathe {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
 }
 
-.wifi-icon {
+.eyebrow {
   position: absolute;
-  left: 247px;
-  top: 15px;
-  width: 58px;
-  height: 58px;
-  object-fit: contain;
+  left: 28px;
+  top: 10px;
+  width: 156px;
+  height: 14px;
+  color: #8cecf2;
+  font-size: 10px;
+  line-height: 14px;
+  letter-spacing: 1px;
 }
 
 .title {
   position: absolute;
-  left: 16px;
-  top: 48px;
-  width: 210px;
-  height: 26px;
-  font-size: 23px;
-  line-height: 26px;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.subtitle {
-  position: absolute;
-  left: 16px;
-  top: 76px;
-  width: 288px;
-  height: 54px;
-  color: rgba(255,255,255,0.82);
-  font-size: 13px;
-  line-height: 18px;
-}
-
-.code-box {
-  position: absolute;
-  left: 16px;
-  top: 134px;
-  width: 288px;
-  height: 46px;
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 8px;
-  background: rgba(255,255,255,0.06);
-}
-
-.code-label {
-  position: absolute;
-  left: 12px;
-  top: 7px;
-  width: 90px;
-  height: 14px;
-  color: rgba(255,255,255,0.54);
-  font-size: 10px;
-  line-height: 14px;
-}
-
-.ssid {
-  position: absolute;
-  left: 12px;
-  top: 21px;
-  width: 130px;
-  height: 18px;
-  color: #fff;
-  font-size: 14px;
-  line-height: 18px;
-  font-weight: 700;
-}
-
-.portal {
-  position: absolute;
-  left: 154px;
-  top: 21px;
-  width: 120px;
-  height: 18px;
-  color: #67e8f9;
-  font-size: 14px;
-  line-height: 18px;
-  font-weight: 700;
-  text-align: right;
-}
-
-.note {
-  position: absolute;
-  left: 16px;
-  top: 184px;
-  width: 288px;
+  left: 14px;
+  top: 29px;
+  width: 190px;
   height: 28px;
-  color: rgba(255,255,255,0.58);
-  font-size: 10px;
-  line-height: 14px;
-}
-
-.skip {
-  position: absolute;
-  left: 96px;
-  top: 218px;
-  width: 128px;
-  height: 18px;
-  border: 0;
-  border-radius: 9px;
-  background: #fff;
-  color: #000;
-  font-size: 10px;
-  line-height: 18px;
-  text-align: center;
+  font-size: 22px;
+  line-height: 28px;
   font-weight: 700;
 }
 
-.success-mark {
+.description {
   position: absolute;
-  left: 244px;
-  top: 18px;
-  width: 42px;
-  height: 42px;
-  border-radius: 21px;
-  background: #22c55e;
-  color: #fff;
-  font-size: 27px;
-  line-height: 42px;
+  left: 14px;
+  top: 61px;
+  width: 292px;
+  height: 30px;
+  color: #9fb0be;
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.setup-card {
+  position: absolute;
+  left: 14px;
+  top: 96px;
+  width: 190px;
+  height: 126px;
+  border: 1px solid rgba(148, 181, 199, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.label {
+  position: absolute;
+  left: 10px;
+  width: 62px;
+  height: 16px;
+  color: #718695;
+  font-size: 9px;
+  line-height: 16px;
+}
+
+.value {
+  position: absolute;
+  left: 69px;
+  width: 110px;
+  height: 16px;
+  overflow: hidden;
+  color: #edf8ff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ssid-label, .ssid-value { top: 8px; }
+.portal-label, .portal-value { top: 33px; }
+
+.ssid-value {
+  color: #8cecf2;
+  font-weight: 700;
+}
+
+.portal-value {
+  color: #67e8f9;
+  font-weight: 700;
+}
+
+.divider {
+  position: absolute;
+  left: 10px;
+  width: 169px;
+  height: 1px;
+  background: rgba(148, 181, 199, 0.12);
+}
+
+.divider-1 { top: 30px; }
+.divider-2 { top: 55px; }
+
+.step {
+  position: absolute;
+  left: 10px;
+  width: 169px;
+  height: 22px;
+}
+
+.step-1 { top: 63px; }
+.step-2 { top: 91px; }
+
+.step-number {
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(34, 211, 238, 0.34);
+  border-radius: 9px;
+  background: rgba(34, 211, 238, 0.1);
+  color: #67e8f9;
+  font-size: 9px;
+  line-height: 16px;
   text-align: center;
-  display: none;
 }
 
-.success-only {
-  display: none;
+.step-text {
+  position: absolute;
+  left: 25px;
+  top: 0;
+  width: 144px;
+  height: 22px;
+  color: #a9bac6;
+  font-size: 9px;
+  line-height: 11px;
 }
 
-body.success .setup-only {
-  display: none;
+.qr-card {
+  position: absolute;
+  left: 206px;
+  top: 96px;
+  width: 104px;
+  height: 126px;
+  border: 1px solid rgba(103, 232, 249, 0.24);
+  border-radius: 10px;
+  background: rgba(10, 25, 34, 0.88);
 }
 
-body.success .success-only {
-  display: block;
+.qr-wrap {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 100px;
+  height: 100px;
+  padding: 12px;
+  border-radius: 5px;
+  background: #fff;
 }
 
-body.success .success-mark {
-  display: block;
+.qr-image {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  width: 76px;
+  height: 76px;
+  image-rendering: pixelated;
 }
 
-body.success .status {
-  color: #bbf7d0;
-  border-color: rgba(34,197,94,0.38);
-  background: rgba(34,197,94,0.14);
+.qr-title {
+  position: absolute;
+  left: 4px;
+  top: 102px;
+  width: 96px;
+  height: 13px;
+  color: #dffbff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+}
+
+.qr-note {
+  position: absolute;
+  left: 4px;
+  top: 114px;
+  width: 96px;
+  height: 11px;
+  overflow: hidden;
+  color: #66808f;
+  font-size: 8px;
+  line-height: 9px;
+  text-align: center;
+  word-break: break-all;
 }
 </style>
 </head>
 <body>
 <main class="screen">
-  <div class="glow"></div>
-  <div class="status setup-only">等待配网</div>
-  <div class="status success-only">设备已联网</div>
+  <div class="status-dot"></div>
+  <div class="eyebrow">WAITING FOR NETWORK</div>
+  <div class="title">等待配网</div>
+  <div class="description">连接设备热点，然后打开配网页面完成 WiFi 设置</div>
 
-  <img class="wifi-icon setup-only" src="assets/wifi-guide-ios.png" alt="" aria-hidden="true">
-  <div class="success-mark" aria-hidden="true">✓</div>
+  <section class="setup-card" aria-label="配网信息">
+    <div class="label ssid-label">设备热点</div>
+    <div class="value ssid-value" id="setupSsid">clocteck-cubic</div>
+    <div class="divider divider-1"></div>
 
-  <div class="title setup-only">WiFi 配网</div>
-  <div class="title success-only">设备已联网</div>
+    <div class="label portal-label">配网地址</div>
+    <div class="value portal-value" id="setupPortal">192.168.18.1</div>
+    <div class="divider divider-2"></div>
 
-  <div class="subtitle setup-only">
-    1. 手机或 PC 连接 <b>clocteck-cubic</b><br>
-    2. 等待自动弹出控制网页<br>
-    &nbsp;&nbsp;&nbsp;或输入 <b>192.168.18.1</b>
-  </div>
-  <div class="subtitle success-only">
-    现在可以使用以下域名<br>
-    进入设备控制页面
-  </div>
-
-  <section class="code-box setup-only">
-    <div class="code-label">热点 / 地址</div>
-    <div class="ssid">clocteck-cubic</div>
-    <div class="portal">192.168.18.1</div>
-  </section>
-  <section class="code-box success-only">
-    <div class="code-label">设备地址</div>
-    <div class="ssid">clocteck-cubic.local</div>
-    <div class="portal" id="deviceIp">192.168.0.180</div>
+    <div class="step step-1">
+      <div class="step-number">1</div>
+      <div class="step-text">手机或电脑连接上方<br>设备热点</div>
+    </div>
+    <div class="step step-2">
+      <div class="step-number">2</div>
+      <div class="step-text">等待自动弹出页面，或<br>扫码打开配网地址</div>
+    </div>
   </section>
 
-  <div class="note setup-only">跳过后仍可使用本地 app；天气、股票等功能需要联网。</div>
-  <div class="note success-only">设备已联网，可以使用天气、股票和应用商店等功能。</div>
-
-  <button class="skip setup-only" type="button">按 HOME 键跳过</button>
-  <button class="skip success-only" type="button">按 HOME 键返回</button>
+  <section class="qr-card" aria-label="配网页面二维码">
+    <div class="qr-wrap">
+      <img class="qr-image" id="portalQr" alt="配网页面二维码">
+    </div>
+    <div class="qr-title">扫码打开配网页</div>
+    <div class="qr-note" id="qrTarget">http://192.168.18.1/</div>
+  </section>
 </main>
 
 <script>
 const params = new URLSearchParams(location.search);
-if (params.get("state") === "success") {
-  document.body.classList.add("success");
-}
-const ip = params.get("ip");
-if (ip) {
-  document.getElementById("deviceIp").textContent = ip;
-}
+const ssid = params.get("ssid") || "clocteck-cubic";
+const portal = params.get("portal") || "192.168.18.1";
+const target = /^https?:\/\//i.test(portal) ? portal : `http://${portal}/`;
+
+document.getElementById("setupSsid").textContent = ssid;
+document.getElementById("setupPortal").textContent = portal;
+document.getElementById("qrTarget").textContent = target;
+document.getElementById("portalQr").src =
+  `https://api.qrserver.com/v1/create-qr-code/?size=132x132&margin=0&data=${encodeURIComponent(target)}`;
 </script>
 </body>
 </html>
