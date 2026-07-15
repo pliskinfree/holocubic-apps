@@ -1,5 +1,5 @@
 name = WiFi Setting Guide
-version = 1.0.0
+version = 2.0.0
 kind = app
 entry = main.lua
-description = First-run WiFi setup guide for HoloCubic
+description = Bilingual first-run WiFi setup guide with live network details
