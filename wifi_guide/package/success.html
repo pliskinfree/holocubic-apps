@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=320,height=240,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>WiFi Connected</title>
+<style>
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+}
+
+.screen {
+  position: relative;
+  width: 320px;
+  height: 240px;
+  overflow: hidden;
+  background: #000;
+}
+
+.green-glow {
+  position: absolute;
+  left: 92px;
+  top: -58px;
+  width: 170px;
+  height: 170px;
+  border-radius: 85px;
+  background: rgba(34, 197, 94, 0.16);
+}
+
+.cyan-glow {
+  position: absolute;
+  left: 224px;
+  top: 124px;
+  width: 116px;
+  height: 116px;
+  border-radius: 58px;
+  background: rgba(34, 211, 238, 0.12);
+}
+
+.badge {
+  position: absolute;
+  left: 16px;
+  top: 14px;
+  width: 82px;
+  height: 22px;
+  border: 1px solid rgba(34, 197, 94, 0.46);
+  border-radius: 11px;
+  background: rgba(34, 197, 94, 0.14);
+  color: #bbf7d0;
+  font-size: 11px;
+  line-height: 20px;
+  text-align: center;
+}
+
+.check-ring {
+  position: absolute;
+  left: 132px;
+  top: 27px;
+  width: 56px;
+  height: 56px;
+  border-radius: 28px;
+  border: 2px solid rgba(134, 239, 172, 0.72);
+  background: #16a34a;
+}
+
+.check-mark {
+  position: absolute;
+  left: 147px;
+  top: 43px;
+  width: 26px;
+  height: 14px;
+  border-left: 5px solid #fff;
+  border-bottom: 5px solid #fff;
+  transform: rotate(-45deg);
+}
+
+.title {
+  position: absolute;
+  left: 0;
+  top: 91px;
+  width: 320px;
+  height: 28px;
+  color: #fff;
+  font-size: 24px;
+  line-height: 28px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.subtitle {
+  position: absolute;
+  left: 16px;
+  top: 119px;
+  width: 288px;
+  height: 30px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  line-height: 15px;
+  text-align: center;
+}
+
+.address-card {
+  position: absolute;
+  left: 16px;
+  top: 153px;
+  width: 288px;
+  height: 48px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.label {
+  position: absolute;
+  left: 12px;
+  top: 7px;
+  width: 70px;
+  height: 13px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 10px;
+  line-height: 13px;
+}
+
+.host {
+  position: absolute;
+  left: 12px;
+  top: 23px;
+  width: 158px;
+  height: 18px;
+  color: #fff;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 700;
+}
+
+.ip {
+  position: absolute;
+  left: 174px;
+  top: 23px;
+  width: 100px;
+  height: 18px;
+  color: #67e8f9;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.hint {
+  position: absolute;
+  left: 16px;
+  top: 203px;
+  width: 288px;
+  height: 14px;
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.done {
+  position: absolute;
+  left: 96px;
+  top: 218px;
+  width: 128px;
+  height: 18px;
+  border: 0;
+  border-radius: 9px;
+  background: #fff;
+  color: #000;
+  font-size: 10px;
+  line-height: 18px;
+  text-align: center;
+  font-weight: 700;
+}
+
+</style>
+</head>
+<body>
+<main class="screen">
+  <div class="green-glow"></div>
+  <div class="cyan-glow"></div>
+  <div class="badge">设备已联网</div>
+
+  <div class="check-ring" aria-hidden="true"></div>
+  <div class="check-mark" aria-hidden="true"></div>
+
+  <div class="title">设备已联网</div>
+  <div class="subtitle">现在可以使用以下域名<br>进入设备控制页面</div>
+
+  <section class="address-card">
+    <div class="label">控制地址 / IP</div>
+    <div class="host">clocteck-cubic.local</div>
+    <div class="ip" id="deviceIp">192.168.0.180</div>
+  </section>
+
+  <div class="hint">天气、股票等联网功能已可使用。</div>
+  <button class="done" type="button">按 HOME 键返回</button>
+</main>
+
+<script>
+const params = new URLSearchParams(location.search);
+const ip = params.get("ip");
+if (ip) {
+  document.getElementById("deviceIp").textContent = ip;
+}
+</script>
+</body>
+</html>
