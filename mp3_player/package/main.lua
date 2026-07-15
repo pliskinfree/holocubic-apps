@@ -18,8 +18,9 @@ MUSIC_PLAYER_APP = {
   I2S_BITS = 16,
   DATA_OUT_PIN = 48,
   BUFFER_COUNT = 12,
-  BUFFER_LEN = 512,
+  BUFFER_LEN = 1024,
   I2S_BUFFER_FALLBACKS = {
+    { count = 12, len = 1024 },
     { count = 12, len = 512 },
     { count = 6, len = 512 },
     { count = 4, len = 512 },
