@@ -1,102 +1,60 @@
-# WiFi Setting Guide 页面说明
+# WiFi Setting Guide
 
-这是一个 320 x 240 的 WiFi 配网引导页面设计稿，文件为 `main.html`。
+WiFi Setting Guide 是适配 HoloCubic 320 × 240 屏幕的首次联网引导 app。设备未联网时显示热点与配网地址；获得 Station IP 后自动切换到成功页，展示 WiFi、RSSI、IP、域名和控制网页二维码。
 
-## 中文字体
+## 主要功能
 
-设备端 Lua app 使用 LVGL `.bin` 字体：
+- 等待配网与配网成功两套纯黑界面，全部使用 LVGL 绝对坐标布局。
+- 读取 `/sd/apps/settings.json` 的 `language`、`locale` 或 `lang`；仅 `zh-CN` / `zh-Hans` 使用中文，缺失或其他语言默认英文。
+- 通过设备本地 `/api/system/state` 获取网络状态。
+- RSSI 规则与 Web 控制页一致：优先使用扫描列表第一条同名 SSID 的 `rssi`，缺失时回退到 `sta_rssi`。
+- Lua 内置 QR Version 2-L 编码、Reed–Solomon 纠错与 Canvas 绘制，不依赖 `lv_qrcode_*` 或外部二维码服务。
+- 定时检查联网状态、语言和信号强度；退出时释放定时器、按键监听和字体资源。
+
+## 文件说明
+
+```text
+app.info                 app 元信息
+main.lua                 设备端入口
+main.png                 launcher 图标
+info.html                launcher 中文介绍页
+main.html                等待配网 HTML 设计稿
+success.html             配网成功 HTML 设计稿
+font/*.bin               LVGL 中文字体
+assets/*                 设计资源
+```
+
+设备端字体路径：
 
 ```text
 /sd/apps/wifi_guide/font/msyh_cn_13.bin
 /sd/apps/wifi_guide/font/18chinese.bin
 ```
 
-代码通过 `lv_font_load()` 加载字体，退出 app 时通过 `lv_font_free()` 释放字体。
+## HTML 预览
 
-LVGL 字体转换工具源码已下载到：
-
-```text
-tools/lv_font_conv
-```
-
-## 页面风格
-
-- 主色为黑色，文字为白色。
-- 使用少量青色表现 WiFi 状态。
-- 所有主要 UI 元素使用 `position:absolute` 固定定位，适配 320 x 240 小屏。
-- 页面默认显示“等待配网”状态。
-
-## 等待配网文案
-
-标题：
-
-```text
-连接 WiFi
-```
-
-正文：
-
-```text
-请连接 clocteck_cubic
-并登录 192.168.18.1 完成配网
-```
-
-跳过说明：
-
-```text
-跳过后仍可使用本地 app；天气、股票等功能需要联网。
-```
-
-## 配网成功文案
-
-标题：
-
-```text
-配网成功
-```
-
-正文：
-
-```text
-请使用 clocteck-cubic.local
-打开设备控制网页
-```
-
-设备地址：
-
-```text
-clocteck-cubic.local
-设备 IP 地址
-```
-
-说明：
-
-```text
-设备已联网，可以使用天气、股票和应用商店等功能。
-```
-
-成功页按钮：
-
-```text
-按 HOME 键返回
-```
-
-## 预览
-
-默认配网页：
+等待配网页：
 
 ```text
 main.html
+main.html?ssid=clocteck-cubic&portal=192.168.18.1
 ```
 
-内置成功状态：
+成功页：
 
 ```text
-main.html?state=success&ip=192.168.0.180
+success.html
+success.html?wifi=HomeWiFi&db=-62&ip=192.168.0.188
 ```
 
-独立成功页：
+HTML 文件用于设计预览；设备实际界面由 `main.lua` 使用 LVGL 绘制。
+
+## 部署
+
+将整个 package 内容复制到：
 
 ```text
-success.html?ip=192.168.0.180
+/sd/apps/wifi_guide/
 ```
+
+然后调用 `app.rescan()` 或重启设备。运行 app 后可按 HOME 键返回。
