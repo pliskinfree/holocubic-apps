@@ -24,6 +24,9 @@ local AUTOSTART_DELAY_MS = 200
 local AUTOSTART_MARK_PATH = "/tmp/launcher_autostart_fired"
 local DEFAULT_AUTOSTART_APP_ID = "wifi_guide"
 local DISPLAY_SERVICE_ID = "display_service"
+local DISPLAY_SERVICE_APP_DIR = "/sd/apps/display_service"
+local DISPLAY_SERVICE_BUNDLE_DIR = "/sd/apps/launcher/services/display_service"
+local DISPLAY_SERVICE_BUNDLE_VERSION = "1.0.4"
 
 local function normalize_language(value)
   local text = tostring(value or ""):gsub("_", "-")
@@ -167,10 +170,67 @@ local function sync_ntp_once()
   end)
 end
 
+local function version_parts(value)
+  local parts = {}
+  for part in tostring(value or ""):gmatch("(%d+)") do
+    parts[#parts + 1] = tonumber(part) or 0
+    if #parts >= 4 then break end
+  end
+  return parts
+end
+
+local function version_lt(a, b)
+  local av, bv = version_parts(a), version_parts(b)
+  for i = 1, 4 do
+    local ai, bi = av[i] or 0, bv[i] or 0
+    if ai < bi then return true end
+    if ai > bi then return false end
+  end
+  return false
+end
+
+local function read_info_value(path, key)
+  if not file or not file.getcontents then return "" end
+  local ok, raw = pcall(function() return file.getcontents(path) end)
+  if not ok or type(raw) ~= "string" then return "" end
+  local pattern = "\n%s*" .. key .. "%s*=%s*([^\r\n]+)"
+  return text_or(("\n" .. raw):match(pattern), ""):match("^%s*(.-)%s*$") or ""
+end
+
+local function copy_file(src, dst)
+  if not file or not file.getcontents or not file.putcontents then return false end
+  local ok, data = pcall(function() return file.getcontents(src) end)
+  if not ok or type(data) ~= "string" then return false end
+  local wrote, result = pcall(function() return file.putcontents(dst, data) end)
+  return wrote and result ~= false
+end
+
+local function ensure_display_service()
+  if not file or not file.exists then return false end
+  if not file.exists(DISPLAY_SERVICE_BUNDLE_DIR .. "/main.lua") then return false end
+
+  local current_version = read_info_value(DISPLAY_SERVICE_APP_DIR .. "/app.info", "version")
+  if file.exists(DISPLAY_SERVICE_APP_DIR .. "/main.lua")
+      and current_version ~= ""
+      and not version_lt(current_version, DISPLAY_SERVICE_BUNDLE_VERSION) then
+    return false
+  end
+
+  if file.mkdir then pcall(function() file.mkdir(DISPLAY_SERVICE_APP_DIR) end) end
+  local ok_info = copy_file(DISPLAY_SERVICE_BUNDLE_DIR .. "/app.info", DISPLAY_SERVICE_APP_DIR .. "/app.info")
+  local ok_main = copy_file(DISPLAY_SERVICE_BUNDLE_DIR .. "/main.lua", DISPLAY_SERVICE_APP_DIR .. "/main.lua")
+  if ok_info and ok_main then
+    if app and app.rescan then pcall(function() app.rescan() end) end
+    return true
+  end
+  return false
+end
+
 local function start_display_service()
   if not app or not app.start_service then
     return
   end
+  ensure_display_service()
   pcall(function()
     app.start_service(DISPLAY_SERVICE_ID)
   end)
