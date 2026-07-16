@@ -1494,6 +1494,12 @@ function APP.stop(reason)
 
   APP.stopped = true
 
+  if APP.controller_timer then
+    pcall_fn(function() APP.controller_timer:stop() end)
+    pcall_fn(function() APP.controller_timer:unregister() end)
+    APP.controller_timer = nil
+  end
+
   if APP.timer then
     pcall_fn(function()
       APP.timer:stop()
@@ -1543,7 +1549,24 @@ local viper_ok, viper_err = APP.init_viper_engine()
 if not viper_ok then
   error("FluidPendant requires viper: " .. tostring(viper_err))
 end
+
+local function init_controller_exit()
+  if not controller or not controller.state or not tmr or not tmr.create then return end
+  local last_buttons = 0
+  APP.controller_timer = tmr.create()
+  APP.controller_timer:alarm(40, tmr.ALARM_AUTO, function()
+    local ok, pad = pcall(function() return controller.state("ble-main") end)
+    local buttons = ok and type(pad) == "table" and (tonumber(pad.buttons) or 0) or 0
+    local pressed = buttons & (~last_buttons)
+    last_buttons = buttons
+    if (pressed & (4096 | 32768)) ~= 0 then
+      APP.stop("controller-exit")
+      if app and app.exit then pcall(function() app.exit() end) end
+    end
+  end)
+end
 build_display_lookup()
+init_controller_exit()
 init_root()
 init_time_module()
 

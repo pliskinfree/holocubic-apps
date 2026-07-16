@@ -441,6 +441,11 @@ function M.new(cfg, load_module)
       pcall(function() self.timer:unregister() end)
       self.timer = nil
     end
+    if self.controller_exit_timer then
+      pcall(function() self.controller_exit_timer:stop() end)
+      pcall(function() self.controller_exit_timer:unregister() end)
+      self.controller_exit_timer = nil
+    end
     if self.wake_open_timer then
       pcall(function() self.wake_open_timer:stop() end)
       pcall(function() self.wake_open_timer:unregister() end)

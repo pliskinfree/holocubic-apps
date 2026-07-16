@@ -854,6 +854,10 @@ function state.stop()
     state.weather_timer:unregister()
     state.weather_timer = nil
   end
+  if state.controller_timer then
+    state.controller_timer:unregister()
+    state.controller_timer = nil
+  end
 
   if key and key.off then
     key.off()
@@ -862,6 +866,21 @@ function state.stop()
     pcall(lv_font_free, WEATHER_FONT)
     WEATHER_FONT = nil
   end
+end
+
+if controller and controller.state and tmr and tmr.create then
+  local last_buttons = 0
+  state.controller_timer = tmr.create()
+  state.controller_timer:alarm(40, tmr.ALARM_AUTO, function()
+    local ok, pad = pcall(function() return controller.state("ble-main") end)
+    local buttons = ok and type(pad) == "table" and (tonumber(pad.buttons) or 0) or 0
+    local pressed = buttons & (~last_buttons)
+    last_buttons = buttons
+    if (pressed & (4096 | 32768)) ~= 0 then
+      state.stop()
+      if app and app.exit then pcall(function() app.exit() end) end
+    end
+  end)
 end
 
 function state.restart_client()

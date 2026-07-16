@@ -53,5 +53,6 @@
   function use(lang){root.dataset.uiLang=lang;root.lang=lang==='zh'?'zh-CN':'en';btn.textContent=lang==='zh'?'English':'中文';localStorage.setItem('holo-pc-monitor-lang',lang)}
   btn.onclick=()=>use(root.dataset.uiLang==='zh'?'en':'zh');use(localStorage.getItem('holo-pc-monitor-lang')||'zh');
 </script>
+<section class="controller-support"><h2>蓝牙手柄按键</h2><p>Select/Home：退出应用并返回桌面。</p></section>
 </body>
 </html>
