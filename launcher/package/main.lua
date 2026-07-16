@@ -758,6 +758,8 @@ end)
 
 key.on(key.DOWN, function(evt_type, ts_ms)
   if evt_type == key.SHORT then
+    load_apps()
+  elseif evt_type == key.LONG_START then
     rescan_apps()
   end
 end)
