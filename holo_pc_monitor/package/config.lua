@@ -70,7 +70,7 @@ config.metrics = {
     title = "CPU Temp",
     unit = "C",
     kind = "temperature",
-    aliases = { "CPU Temperature", "CPU Package", "CPU Diode" },
+    aliases = { "CPU Diode", "CPU Temperature", "CPU Package" },
     min_valid = 1
   },
   {
