@@ -70,7 +70,7 @@ config.metrics = {
     title = "CPU Temp",
     unit = "C",
     kind = "temperature",
-    aliases = { "CPU Diode", "CPU Temperature", "CPU Package" },
+    aliases = { "CPU 二极管", "CPU Diode", "CPU Temperature", "CPU Package" },
     min_valid = 1
   },
   {
@@ -86,7 +86,7 @@ config.metrics = {
     title = "Fan",
     unit = "RPM",
     kind = "speed",
-    aliases = { "CPU Fan", "GPU Fan", "Chassis Fan 1", "Chassis Fan 2", "Chassis Fan", "Fan" },
+    aliases = { "CPU Fan", "CPU Fan Alternate", "GPU Fan", "Chassis Fan 1", "Chassis Fan 2", "Chassis Fan", "Fan" },
     min_valid = 1
   }
 }
