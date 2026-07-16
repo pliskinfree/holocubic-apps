@@ -456,6 +456,16 @@ local function render_initial()
   STATE.animating = false
 end
 
+local function show_initial_labels()
+  if not UI.initial_labels_hidden then
+    return
+  end
+  for _, slot in ipairs(UI.slots or {}) do
+    safe_set_hidden(slot.label, false)
+  end
+  UI.initial_labels_hidden = false
+end
+
 local function start_slide(dir)
   local incoming = item_at(STATE.index + dir)
   local hidden = UI.hidden
@@ -500,6 +510,7 @@ local function load_apps()
   STATE.apps = visible
   clamp_index()
   render_initial()
+  show_initial_labels()
 end
 
 local function schedule_reload(delay_ms)
@@ -673,6 +684,7 @@ local function build_ui()
   style_panel(UI.bg, 0x000000, 255, 0, 0, 0x000000, 0)
 
   UI.slots = {}
+  UI.initial_labels_hidden = true
   for i = 1, 4 do
     local slot = {}
     slot.box = lv_obj_create(root)
@@ -682,6 +694,7 @@ local function build_ui()
     if not slot.canvas then error("launcher: icon canvas create failed") end
     slot.canvas_w, slot.canvas_h = ICON_CANVAS_SIZE, ICON_CANVAS_SIZE
     slot.label = lv_label_create(root)
+    safe_set_hidden(slot.label, true)
     lv_obj_set_size(slot.label, ICON_SIZE, LABEL_H)
     lv_label_set_long_mode(slot.label, LV_LABEL_LONG_CLIP)
     style_text(slot.label, 0x808080, UI_FONT, LV_TEXT_ALIGN_CENTER)
