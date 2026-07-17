@@ -128,6 +128,8 @@ end)
 
 ### wifi
 
+前台 App 注册完整 `wifi` 模块；后台 Service 仅注册只读的 `wifi.sta.getmac()`，其它 WiFi 接口和常量均不可用。
+
 常用模式：`wifi.NULLMODE`、`wifi.STATION`、`wifi.SOFTAP`、`wifi.STATIONAP`。
 
 - `wifi.mode(mode[, save])`
@@ -412,8 +414,76 @@ end)
 app.on("imu", nil)
 ```
 
+## BLE Service、controller 与 IPC
+
+低层 `ble` 只在后台 Service 运行时注册。API 命名和 IRQ 编号参考 MicroPython：
+`ble.gap_scan()`、`ble.gap_connect()`、`ble.gattc_*()`、`ble.irq()`。前台 app 不直接
+扫描或连接 BLE，而是读取 Service 发布的标准化手柄状态。
+
+订阅通知时可用 `ble.gattc_discover_descriptors()` 查找 UUID `0x2902`，收到
+`IRQ_GATTC_DESCRIPTOR_RESULT=13` 后再通过 `ble.gattc_write()` 写 CCCD；不要固定假设
+descriptor 句柄等于特征 value handle 加一。
+
+Service 发布状态（`controller.publish` 只在 Service 中存在）：
+
+```lua
+controller.publish("ble-main", {
+  connected = true,
+  buttons = 0x00000001,
+  lx = 0, ly = 0, rx = 0, ry = 0,
+  lt = 0, rt = 0,
+  name = "My Controller",
+  device_id = "AA:BB:CC:DD:EE:FF",
+})
+```
+
+若省略 `pressed/released`，底层会根据前一次 `buttons` 自动计算边沿。每个 source 只能由
+一个 Service 发布；Service 退出时会自动发布一次 `connected=false`、释放全部按钮。
+
+前台 app 读取或订阅：
+
+```lua
+local state = controller.state("ble-main")
+
+controller.on("ble-main", function(source, event)
+  if event.pressed ~= 0 then
+    print(source, event.buttons, event.pressed)
+  end
+end)
+
+-- 页面或 app 销毁时解绑
+controller.on("ble-main", nil)
+```
+
+状态字段包括 `seq/timestamp_ms/connected/buttons/pressed/released`、双摇杆
+`lx/ly/rx/ry`、扳机 `lt/rt`、`name/device_id/source`。`controller.sources()` 返回当前
+已发布 source 列表。
+
+映射页面与 Service 之间使用二进制安全 IPC。endpoint 全局唯一，单条 payload 最大
+1024 字节；映射可用 `json.encode/decode` 传输：
+
+```lua
+-- BLE Service
+ipc.listen("ble-controller", function(topic, payload, timestamp_ms)
+  if topic == "set_mapping" then
+    local mapping = json.decode(payload)
+    -- 校验并保存 mapping，后续 publish 前应用。
+  end
+end)
+
+-- 设置页面
+local ok, err = ipc.send("ble-controller", "set_mapping", json.encode(mapping))
+
+-- Service/页面退出时释放自己监听的 endpoint
+ipc.listen("ble-controller", nil)
+```
+
+`ipc.endpoints()` 可查看当前 endpoint；同名 endpoint 被其它 Lua 状态机持有时，
+`ipc.listen()` 返回 `nil, err`。
+
 服务和 WebUI 相关接口按需使用：`app.services()`、`app.start_service(id)`、`app.stop_service(id_or_instance)`、`app.route_base()`、`app.set_home_exit(enabled)`。WebUI 是否可用由底层根据当前 app 注册的 `route_base .. "/"` 首页路由自动识别。
 `app.start_service(id)` 遇到同 id service 已运行时会重启旧实例。
+manifest 设置 `autostart_service=true` 的 Service 会被视为常驻服务；退出或停止后，应用管理器会在约 2 秒内再次拉起。需要长期停用时应关闭该 manifest 配置或卸载对应 Service。
 
 ### sys 设备控制
 

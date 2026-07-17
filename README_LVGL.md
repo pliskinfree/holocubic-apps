@@ -460,13 +460,18 @@
 - `lv_snapshot_take(obj_id[, cf]) -> snapshot`
 - `lv_snapshot_free(snapshot)`
 - `lv_snapshot_buf_size_needed(obj_id[, cf]) -> size`
+- `lv_snapshot_save_to_png(snapshot, path) -> true | nil, err`
 
 说明：
 - `src` 可为路径、symbol 或图片 handle
+- `lv_img_set_src(img_id, nil)` synchronously clears the source and releases tracked memory/userdata image refs.
+- `src` may also be a full userdata whose first field is `lv_img_dsc_t`; Lua UI keeps a registry ref until the image source is replaced, the object is deleted, or the UI is cleaned up.
+- For userdata image sources, clear the image source before calling the module-side free API because LVGL stores the descriptor pointer and does not copy pixel data.
 - `font` 可为内置字体或 `lv_font_load()` 返回值
 - 内置字体格式如 `LV_FONT_MONTSERRAT_14`，可用字号：8、10、12、14、16、20、24、28
 - snapshot 默认 `cf=LV_IMG_CF_TRUE_COLOR_ALPHA`；失败返回 `nil, err`
 - handle 仍被对象引用时不要提前释放
+- `lv_snapshot_save_to_png` 支持 `/sd/...` 和 `S:/...` 路径；保存后仍需调用 `lv_snapshot_free`
 
 ### Chart / Meter Handles
 - `lv_chart_add_series(chart_id, color[, axis]) -> series`
