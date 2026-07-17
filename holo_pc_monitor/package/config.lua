@@ -3,7 +3,10 @@ local config = {}
 config.host = "192.168.0.80"
 config.port = 80
 config.path = "/sse"
-config.layout = "classic"
+config.layout = "dashboard"
+config.cpu_name = "CPU"
+config.gpu_name = "GPU"
+config.accent_color = 0xE7C21D
 
 config.timeout_ms = 7000
 config.reconnect_ms = 2000
@@ -43,19 +46,46 @@ config.metrics = {
     aliases = { "Memory Usage", "Memory Utilization", "RAM Usage", "Memory" }
   },
   {
-    id = "vram_usage",
-    title = "VRAM",
-    unit = "%",
-    kind = "percent",
-    aliases = { "GPU Memory Usage", "VRAM Usage", "Video Memory Usage", "VRAM" }
-  },
-  {
     id = "cpu_clock",
     title = "CPU Clock",
     unit = "MHz",
     kind = "clock",
     aliases = { "CPU Frequency", "CPU Clock", "CPU Core Clock" },
     min_valid = 1
+  },
+  {
+    id = "cpu_voltage",
+    title = "CPU Voltage",
+    unit = "V",
+    kind = "voltage",
+    aliases = { "CPU Voltage", "CPU Core Voltage", "Vcore", "CPU Vcore", "CPU VID" },
+    min_valid = 0.01
+  },
+  {
+    id = "cpu_power",
+    title = "CPU Power",
+    unit = "W",
+    kind = "power",
+    aliases = { "CPU Package Power", "CPU Power", "CPU PPT" },
+    min_valid = 0.01
+  },
+  {
+    id = "cpu_name", title = "CPU Name", kind = "text", aliases = { "CPU Name" }
+  },
+  {
+    id = "gpu_name", title = "GPU Name", kind = "text", aliases = { "GPU Name" }
+  },
+  {
+    id = "memory_used", title = "Used Memory", unit = "MB", kind = "memory", aliases = { "Used Memory" }, min_valid = 0
+  },
+  {
+    id = "memory_free", title = "Free Memory", unit = "MB", kind = "memory", aliases = { "Free Memory" }, min_valid = 0
+  },
+  {
+    id = "network_upload", title = "Network Upload", unit = "KB/s", kind = "network", aliases = { "Network Upload 1", "Network Upload 2", "Network Upload 3", "Network Upload 4", "Network Upload 5", "Network Upload 6", "Network Upload 7", "Network Upload 8" }, min_valid = 0.01
+  },
+  {
+    id = "network_download", title = "Network Download", unit = "KB/s", kind = "network", aliases = { "Network Download 1", "Network Download 2", "Network Download 3", "Network Download 4", "Network Download 5", "Network Download 6", "Network Download 7", "Network Download 8" }, min_valid = 0.01
   },
   {
     id = "gpu_clock",

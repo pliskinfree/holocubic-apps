@@ -107,7 +107,18 @@ local function map_metrics(entries, metric_defs)
     -- CPU Temperature = 0 falls back to CPU Package).
     for _, alias in ipairs(metric.aliases or {}) do
       for _, entry in ipairs(entries) do
-        local value = number_after_alias(entry.text, alias)
+        if metric.kind == "text" then
+          local first, last = entry.text:lower():find(alias:lower(), 1, true)
+          if first == 1 then
+            local value = trim(entry.text:sub(last + 1):gsub("^[%s:=%-]+", ""))
+            if value ~= "" then
+              best = { value = value, unit = "", label = alias, text = entry.text, source = entry.key }
+              break
+            end
+          end
+        end
+        local label_matches = trim(entry.label):lower() == trim(alias):lower()
+        local value = metric.kind ~= "text" and label_matches and entry.value or nil
         local valid = value ~= nil
         local min_valid = metric.min_valid
         if min_valid == nil and

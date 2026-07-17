@@ -20,6 +20,32 @@ if _G.__aida_monitor and _G.__aida_monitor.stop then
 end
 
 local config = dofile(APP_DIR .. "/config.lua")
+config.metrics = config.metrics or {}
+local function ensure_metric(def)
+  for _, item in ipairs(config.metrics) do
+    if item.id == def.id then
+      for key, value in pairs(def) do
+        item[key] = value
+      end
+      return
+    end
+  end
+  config.metrics[#config.metrics + 1] = def
+end
+ensure_metric({
+  id = "cpu_voltage", title = "CPU Voltage", unit = "V", kind = "voltage",
+  aliases = { "CPU Voltage", "CPU Core Voltage", "Vcore", "CPU Vcore", "CPU VID" }, min_valid = 0.01
+})
+ensure_metric({
+  id = "cpu_power", title = "CPU Power", unit = "W", kind = "power",
+  aliases = { "CPU Package Power", "CPU Power", "CPU PPT" }, min_valid = 0.01
+})
+ensure_metric({ id = "cpu_name", title = "CPU Name", kind = "text", aliases = { "CPU Name" } })
+ensure_metric({ id = "gpu_name", title = "GPU Name", kind = "text", aliases = { "GPU Name" } })
+ensure_metric({ id = "memory_used", title = "Used Memory", unit = "MB", kind = "memory", aliases = { "Used Memory" }, min_valid = 0 })
+ensure_metric({ id = "memory_free", title = "Free Memory", unit = "MB", kind = "memory", aliases = { "Free Memory" }, min_valid = 0 })
+ensure_metric({ id = "network_upload", title = "Network Upload", unit = "KB/s", kind = "network", aliases = { "Network Upload 1", "Network Upload 2", "Network Upload 3", "Network Upload 4", "Network Upload 5", "Network Upload 6", "Network Upload 7", "Network Upload 8" }, min_valid = 0.01 })
+ensure_metric({ id = "network_download", title = "Network Download", unit = "KB/s", kind = "network", aliases = { "Network Download 1", "Network Download 2", "Network Download 3", "Network Download 4", "Network Download 5", "Network Download 6", "Network Download 7", "Network Download 8" }, min_valid = 0.01 })
 local AidaClient = dofile(APP_DIR .. "/aida_client.lua")
 local AidaWeb = nil
 
@@ -49,6 +75,7 @@ local C = {
   mem = 0xF2B84B,
   warn = 0xFF7B4A,
   hot = 0xFF5D5D,
+  accent = tonumber(config.accent_color) or 0xE7C21D,
 }
 
 local S = {
@@ -60,10 +87,18 @@ local S = {
   cpu_usage = nil,
   cpu_temp = nil,
   cpu_clock = nil,
+  cpu_voltage = nil,
+  cpu_power = nil,
+  cpu_name = nil,
   gpu_usage = nil,
   gpu_temp = nil,
   gpu_clock = nil,
+  gpu_name = nil,
   mem_usage = nil,
+  mem_used = nil,
+  mem_free = nil,
+  net_upload = nil,
+  net_download = nil,
   fan = nil,
   cpu_history = {},
   gpu_history = {},
@@ -612,6 +647,196 @@ local function redraw_dashboard(cvs)
   draw_text(cvs, 247, 204, 61, S.fan and string_format("%d RPM", math_floor(S.fan + 0.5)) or "-- RPM", C.text, 14, ALIGN_RIGHT, 255)
 end
 
+local function draw_hexagon(cvs, x, y, active)
+  local color = C.accent
+  local points = {
+    { x + 18, y }, { x + 54, y }, { x + 72, y + 30 },
+    { x + 54, y + 60 }, { x + 18, y + 60 }, { x, y + 30 },
+  }
+  for i = 1, 6 do
+    local a = points[i]
+    local b = points[(i % 6) + 1]
+    if not (active and (i == 1 or i == 6)) then
+      draw_line(cvs, a[1], a[2], b[1], b[2], color, 255, 2)
+    end
+  end
+end
+
+local function draw_bold_text(cvs, x, y, w, text, color, size, align)
+  draw_text(cvs, x, y, w, text, color, size, align, 255)
+  draw_text(cvs, x + 1, y, w, text, color, size, align, 255)
+end
+
+local function draw_hex_node(cvs, x, y, label, value, suffix, active)
+  draw_hexagon(cvs, x, y, active)
+  local label_color = C.accent
+  local value_color = C.text
+  draw_bold_text(cvs, x + 10, y + 7, 52, label, label_color, 10, ALIGN_CENTER)
+  draw_bold_text(cvs, x + 7, y + 28, 58,
+    tostring(value or "--") .. tostring(suffix or ""), value_color, 18, ALIGN_CENTER)
+end
+
+local function network_rate(value)
+  value = tonumber(value)
+  if not value then return "--" end
+  if value >= 1024 then return string_format("%.1fM", value / 1024) end
+  return string_format("%.0fK", value)
+end
+
+local function draw_hex_network_node(cvs, x, y, upload, download)
+  draw_hexagon(cvs, x, y, false)
+  local color = C.accent
+  draw_line(cvs, x + 19, y + 25, x + 19, y + 15, color, 255, 2)
+  draw_line(cvs, x + 19, y + 15, x + 15, y + 19, color, 255, 2)
+  draw_line(cvs, x + 19, y + 15, x + 23, y + 19, color, 255, 2)
+  draw_line(cvs, x + 19, y + 47, x + 19, y + 37, color, 255, 2)
+  draw_line(cvs, x + 19, y + 47, x + 15, y + 43, color, 255, 2)
+  draw_line(cvs, x + 19, y + 47, x + 23, y + 43, color, 255, 2)
+  draw_bold_text(cvs, x + 24, y + 13, 40, network_rate(upload), C.text, 17, ALIGN_CENTER)
+  draw_bold_text(cvs, x + 24, y + 35, 40, network_rate(download), C.text, 17, ALIGN_CENTER)
+end
+
+local function draw_hex_clock_node(cvs, x, y, value, is_gpu)
+  draw_hexagon(cvs, x, y, false)
+  local icon_color = is_gpu and 0xA857F4 or C.cpu
+  if is_gpu then
+    draw_gpu_icon(cvs, x + 31, y + 7, icon_color)
+  else
+    draw_chip_icon(cvs, x + 32, y + 9, icon_color)
+  end
+  draw_text(cvs, x + 8, y + 35, 62, tostring(value or "--") .. "G", C.text, 11, ALIGN_CENTER, 255)
+end
+
+local function hex_clock(value)
+  value = tonumber(value)
+  return value and string_format("%.1f", value / 1000) or "--"
+end
+
+local function hex_number(value)
+  value = tonumber(value)
+  return value and tostring(math_floor(value + 0.5)) or "--"
+end
+
+local function draw_clock_temp(cvs, x, y, clock_value, temp_value, color)
+  draw_bold_text(cvs, x, y, 53, hex_clock(clock_value) .. " GHz", color, 12, ALIGN_LEFT)
+  draw_arc_span(cvs, x + 58, y + 8, 1, 0, 359, color, 255, 2)
+  draw_bold_text(cvs, x + 65, y, 48, hex_number(temp_value) .. "°C", color, 12, ALIGN_LEFT)
+end
+
+local function hex_voltage(value)
+  value = tonumber(value)
+  return value and string_format("%.2f", value) or "--"
+end
+
+local function hex_power(value)
+  value = tonumber(value)
+  return value and tostring(math_floor(value + 0.5)) or "--"
+end
+
+local function memory_gb(value)
+  value = tonumber(value)
+  return value and string_format("%.0fG", value / 1024) or "--"
+end
+
+local function memory_pair(used, total)
+  used, total = tonumber(used), tonumber(total)
+  if not used or not total then return "--/--" end
+  return string_format("%.0f/%.0fG", used / 1024, total / 1024)
+end
+
+local function utf8_prefix(text, max_chars)
+  text = tostring(text or "")
+  local out, pos, count = {}, 1, 0
+  while pos <= #text and count < max_chars do
+    local byte = text:byte(pos)
+    local size = byte >= 0xF0 and 4 or (byte >= 0xE0 and 3 or (byte >= 0xC0 and 2 or 1))
+    out[#out + 1] = text:sub(pos, pos + size - 1)
+    pos = pos + size
+    count = count + 1
+  end
+  return table.concat(out)
+end
+
+local function utf8_length(text)
+  text = tostring(text or "")
+  local pos, count = 1, 0
+  while pos <= #text do
+    local byte = text:byte(pos)
+    pos = pos + (byte >= 0xF0 and 4 or (byte >= 0xE0 and 3 or (byte >= 0xC0 and 2 or 1)))
+    count = count + 1
+  end
+  return count
+end
+
+local function name_style(text, large)
+  local count = utf8_length(text)
+  if large then
+    if count <= 8 then return 22, 8 end
+    if count <= 12 then return 17, 12 end
+    if count <= 17 then return 13, 17 end
+    return 10, 22
+  end
+  if count <= 7 then return 15, 7 end
+  if count <= 10 then return 11, 10 end
+  if count <= 14 then return 8, 14 end
+  return 7, 17
+end
+
+local function compact_cpu_name(text)
+  text = tostring(text or "CPU")
+  text = text:gsub("^AMD%s+", "")
+  text = text:gsub("^Intel%(R%)%s+", "")
+  text = text:gsub("^Intel%s+", "")
+  text = text:gsub("Core%(TM%)%s*", "Core ")
+  text = text:gsub("Processor%s*$", "")
+  text = text:gsub("CPU%s*@.*$", "")
+  text = text:gsub("^Ryzen%s+(%d+)%s+", "R%1 ")
+  text = text:gsub("^Core%s+", "")
+  text = text:gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  return text ~= "" and text or "CPU"
+end
+
+local function redraw_hex(cvs)
+  local clock, date = dashboard_clock()
+  local weather = utf8_prefix(S.weather_city, 4) .. "/" .. utf8_prefix(S.weather_text, 3) .. "/" ..
+    (S.weather_temp and tostring(math_floor(S.weather_temp + 0.5)) .. "°C" or "--°C")
+
+  draw_text(cvs, 12, 5, 60, clock, C.text, 14, ALIGN_LEFT, 255)
+  draw_arc_span(cvs, 101, 12, 3, 0, 359, C.accent, 255, 1)
+  draw_line(cvs, 105, 14, 109, 14, 0xD7E7F5, 255, 1)
+  draw_line(cvs, 109, 14, 112, 17, 0xD7E7F5, 255, 1)
+  draw_line(cvs, 112, 17, 105, 17, 0xD7E7F5, 255, 1)
+  draw_text(cvs, 111, 5, 116, weather, C.text, 8, ALIGN_CENTER, 255, WEATHER_FONT)
+  draw_bold_text(cvs, 235, 6, 76, date, C.sub, 10, ALIGN_RIGHT)
+  draw_line(cvs, 0, 27, 319, 27, 0x161A1C, 255, 1)
+
+  draw_hex_node(cvs, 65, 45, "CPU V", hex_voltage(S.cpu_voltage), "V", false)
+  draw_hex_node(cvs, 11, 75, "CPU", hex_number(S.cpu_usage), "%", false)
+  draw_hex_node(cvs, 65, 105, "GPU", hex_number(S.gpu_usage), "%", true)
+  draw_hex_node(cvs, 119, 75, "RAM", hex_number(S.mem_usage), "%", false)
+  draw_hex_network_node(cvs, 11, 135, S.net_upload, S.net_download)
+  draw_hex_node(cvs, 65, 165, "PWR", hex_power(S.cpu_power), "W", false)
+  draw_hex_node(cvs, 119, 135, "FAN", hex_number(S.fan), "", false)
+
+  local gpu_name = config.gpu_name ~= nil and config.gpu_name ~= "GPU" and config.gpu_name or S.gpu_name or "GPU"
+  local cpu_name = config.cpu_name ~= nil and config.cpu_name ~= "CPU" and config.cpu_name or S.cpu_name or "CPU"
+  cpu_name = compact_cpu_name(cpu_name)
+  draw_bold_text(cvs, 200, 56, 113, utf8_prefix(gpu_name, 13), C.text, 30, ALIGN_LEFT)
+  draw_clock_temp(cvs, 200, 84, S.gpu_clock, S.gpu_temp, C.accent)
+  draw_line(cvs, 200, 110, 313, 110, C.accent, 255, 2)
+  draw_bold_text(cvs, 200, 123, 28, "CPU", C.accent, 12, ALIGN_LEFT)
+  draw_bold_text(cvs, 234, 123, 79,
+    utf8_prefix(cpu_name, 12),
+    C.text, 12, ALIGN_LEFT)
+  draw_clock_temp(cvs, 200, 149, S.cpu_clock, S.cpu_temp, C.accent)
+  draw_line(cvs, 200, 174, 313, 174, C.accent, 255, 2)
+  local mem_total = S.mem_used and S.mem_free and (S.mem_used + S.mem_free) or nil
+  draw_bold_text(cvs, 200, 187, 40, "MEM", C.accent, 12, ALIGN_LEFT)
+  draw_bold_text(cvs, 240, 187, 73,
+    memory_pair(S.mem_used, mem_total), C.text, 12, ALIGN_LEFT)
+
+end
+
 local function load_weather_location()
   local doc = decode_json(read_text_file("/sd/apps/settings.json")) or {}
   local raw = text_or(doc.weather_address or doc.weatherAddress, "")
@@ -665,6 +890,8 @@ redraw = function()
 
   if config.layout == "dashboard" then
     redraw_dashboard(cvs)
+  elseif config.layout == "hex" then
+    redraw_hex(cvs)
   else
     draw_text(cvs, 8, 8, 220, "HOLO PC MONITOR", C.text, 16, ALIGN_LEFT, 255)
     draw_metric_wheel(cvs, 76, 94, "CPU", S.cpu_usage, S.cpu_temp, C.cpu)
@@ -688,10 +915,18 @@ local function update_from_sample(sample)
   S.cpu_usage = metric_value(sample, "cpu_usage")
   S.cpu_temp = metric_value(sample, "cpu_temp")
   S.cpu_clock = metric_value(sample, "cpu_clock")
+  S.cpu_voltage = metric_value(sample, "cpu_voltage")
+  S.cpu_power = metric_value(sample, "cpu_power")
+  S.cpu_name = metric_value(sample, "cpu_name")
   S.gpu_usage = metric_value(sample, "gpu_usage")
   S.gpu_temp = metric_value(sample, "gpu_temp")
   S.gpu_clock = metric_value(sample, "gpu_clock")
+  S.gpu_name = metric_value(sample, "gpu_name")
   S.mem_usage = metric_value(sample, "memory_usage")
+  S.mem_used = metric_value(sample, "memory_used")
+  S.mem_free = metric_value(sample, "memory_free")
+  S.net_upload = metric_value(sample, "network_upload")
+  S.net_download = metric_value(sample, "network_download")
   S.fan = metric_value(sample, "fan")
   push_history(S.cpu_history, S.cpu_usage)
   push_history(S.gpu_history, S.gpu_usage)
@@ -717,10 +952,18 @@ local function reset_sample_state()
   S.cpu_usage = nil
   S.cpu_temp = nil
   S.cpu_clock = nil
+  S.cpu_voltage = nil
+  S.cpu_power = nil
+  S.cpu_name = nil
   S.gpu_usage = nil
   S.gpu_temp = nil
   S.gpu_clock = nil
+  S.gpu_name = nil
   S.mem_usage = nil
+  S.mem_used = nil
+  S.mem_free = nil
+  S.net_upload = nil
+  S.net_download = nil
   S.fan = nil
   S.cpu_history = {}
   S.gpu_history = {}
@@ -914,6 +1157,8 @@ if AidaWeb and AidaWeb.new then
     config_path = APP_DIR .. "/config.lua",
     route_base = (app and app.route_base and app.route_base()) or "/holo_pc_monitor",
     restart = function()
+      C.accent = tonumber(config.accent_color) or 0xE7C21D
+      redraw()
       return state.restart_client()
     end,
   })

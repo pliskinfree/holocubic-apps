@@ -44,12 +44,15 @@ local function encode_json(value)
   end
 
   return string.format(
-    '{"ok":%s,"host":"%s","port":%d,"path":"%s","layout":"%s","url":"%s","message":"%s"}',
+    '{"ok":%s,"host":"%s","port":%d,"path":"%s","layout":"%s","cpu_name":"%s","gpu_name":"%s","accent_color":"%s","url":"%s","message":"%s"}',
     value.ok and "true" or "false",
     json_escape(value.host),
     tonumber(value.port) or 0,
     json_escape(value.path),
     json_escape(value.layout),
+    json_escape(value.cpu_name),
+    json_escape(value.gpu_name),
+    json_escape(value.accent_color),
     json_escape(value.url),
     json_escape(value.message or value.error or "")
   )
@@ -142,6 +145,9 @@ config.host = %q
 config.port = %d
 config.path = %q
 config.layout = %q
+config.cpu_name = %q
+config.gpu_name = %q
+config.accent_color = 0x%06X
 
 config.timeout_ms = %d
 config.reconnect_ms = %d
@@ -181,18 +187,45 @@ config.metrics = {
     aliases = { "Memory Usage", "Memory Utilization", "RAM Usage", "Memory" }
   },
   {
-    id = "vram_usage",
-    title = "VRAM",
-    unit = "%%",
-    kind = "percent",
-    aliases = { "GPU Memory Usage", "VRAM Usage", "Video Memory Usage", "VRAM" }
-  },
-  {
     id = "cpu_clock",
     title = "CPU Clock",
     unit = "MHz",
     kind = "clock",
     aliases = { "CPU Frequency", "CPU Clock", "CPU Core Clock" }
+  },
+  {
+    id = "cpu_voltage",
+    title = "CPU Voltage",
+    unit = "V",
+    kind = "voltage",
+    aliases = { "CPU Voltage", "CPU Core Voltage", "Vcore", "CPU Vcore", "CPU VID" },
+    min_valid = 0.01
+  },
+  {
+    id = "cpu_power",
+    title = "CPU Power",
+    unit = "W",
+    kind = "power",
+    aliases = { "CPU Package Power", "CPU Power", "CPU PPT" },
+    min_valid = 0.01
+  },
+  {
+    id = "cpu_name", title = "CPU Name", kind = "text", aliases = { "CPU Name" }
+  },
+  {
+    id = "gpu_name", title = "GPU Name", kind = "text", aliases = { "GPU Name" }
+  },
+  {
+    id = "memory_used", title = "Used Memory", unit = "MB", kind = "memory", aliases = { "Used Memory" }, min_valid = 0
+  },
+  {
+    id = "memory_free", title = "Free Memory", unit = "MB", kind = "memory", aliases = { "Free Memory" }, min_valid = 0
+  },
+  {
+    id = "network_upload", title = "Network Upload", unit = "KB/s", kind = "network", aliases = { "Network Upload 1", "Network Upload 2", "Network Upload 3", "Network Upload 4", "Network Upload 5", "Network Upload 6", "Network Upload 7", "Network Upload 8" }, min_valid = 0.01
+  },
+  {
+    id = "network_download", title = "Network Download", unit = "KB/s", kind = "network", aliases = { "Network Download 1", "Network Download 2", "Network Download 3", "Network Download 4", "Network Download 5", "Network Download 6", "Network Download 7", "Network Download 8" }, min_valid = 0.01
   },
   {
     id = "gpu_clock",
@@ -229,7 +262,10 @@ return config
     tostring(config.host or "192.168.0.80"),
     tonumber(config.port) or 80,
     tostring(config.path or "/sse"),
-    tostring(config.layout or "classic"),
+    tostring(config.layout or "dashboard"),
+    tostring(config.cpu_name or "CPU"),
+    tostring(config.gpu_name or "GPU"),
+    tonumber(config.accent_color) or 0xE7C21D,
     tonumber(config.timeout_ms) or 7000,
     tonumber(config.reconnect_ms) or 2000,
     tonumber(config.stale_ms) or 5000,
@@ -345,7 +381,22 @@ button{border:1px solid var(--line);background:#fff;padding:0 14px}
           <select id="layoutInput" name="layout">
             <option value="classic">经典双环布局</option>
             <option value="dashboard">四卡仪表盘 320×240</option>
+            <option value="hex">蜂窝节点性能布局 320×240</option>
           </select>
+        </div>
+        <div class="grid2">
+          <div>
+            <label for="cpuNameInput">CPU 名称</label>
+            <input id="cpuNameInput" name="cpu_name" autocomplete="off" maxlength="32" placeholder="例如：i9-14900K">
+          </div>
+          <div>
+            <label for="gpuNameInput">显卡名称</label>
+            <input id="gpuNameInput" name="gpu_name" autocomplete="off" maxlength="32" placeholder="例如：RTX 4080 SUPER">
+          </div>
+        </div>
+        <div>
+          <label for="accentColorInput">界面强调色</label>
+          <input id="accentColorInput" name="accent_color" type="color" value="#E7C21D">
         </div>
         <div class="actions">
           <button class="primary" type="submit">保存并重连</button>
@@ -358,8 +409,8 @@ button{border:1px solid var(--line);background:#fff;padding:0 14px}
     <aside class="panel" aria-labelledby="aida-title">
       <h2 id="aida-title">AIDA64 设置方法</h2>
       <ol class="steps">
-        <li><span class="num">1</span><span><strong>下载配置文件</strong><span>保存 holo-aida.rslcd，然后在 AIDA64 的 设置 > LCD > LCD 项目 > 导入 中导入。</span></span></li>
-        <li><span class="num">2</span><span><strong>开启 RemoteSensor</strong><span>进入 File > Preferences > Hardware Monitoring > LCD，启用 RemoteSensor / LCD 支持。</span></span></li>
+        <li><span class="num">1</span><span><strong>开启 RemoteSensor</strong><span>进入 File > Preferences > Hardware Monitoring > LCD，启用 RemoteSensor / LCD 支持。</span></span></li>
+        <li><span class="num">2</span><span><strong>下载配置文件</strong><span>保存 holo-aida.rslcd，然后在 AIDA64 的 设置 > LCD > LCD 项目 > 导入 中导入。</span></span></li>
         <li><span class="num">3</span><span><strong>确认数据输出</strong><span>在电脑浏览器打开下面地址，应该看到 data: 开头的内容。</span><code class="code" id="urlPreview">http://--:80/sse</code></span></li>
       </ol>
       <p class="note">如果只看到 data: ReLoad，请在 LCD 项目中导入配置后点击 Apply。</p>
@@ -376,6 +427,9 @@ const hostInput = document.getElementById("hostInput");
 const portInput = document.getElementById("portInput");
 const pathInput = document.getElementById("pathInput");
 const layoutInput = document.getElementById("layoutInput");
+const cpuNameInput = document.getElementById("cpuNameInput");
+const gpuNameInput = document.getElementById("gpuNameInput");
+const accentColorInput = document.getElementById("accentColorInput");
 const statusLine = document.getElementById("statusLine");
 const urlPreview = document.getElementById("urlPreview");
 const downloadLink = document.getElementById("downloadLink");
@@ -402,6 +456,12 @@ function syncPreview(){
   urlPreview.textContent = currentUrl();
 }
 
+function syncAccentAvailability(){
+  const enabled = layoutInput.value === "hex";
+  accentColorInput.disabled = !enabled;
+  accentColorInput.title = enabled ? "选择蜂窝布局强调色" : "仅蜂窝布局可设置强调色";
+}
+
 async function loadState(){
   const res = await fetch(API + "/state?_=" + Date.now(), {cache:"no-store"});
   if(!res.ok) throw new Error("HTTP " + res.status);
@@ -409,7 +469,11 @@ async function loadState(){
   hostInput.value = data.host || "";
   portInput.value = data.port || 80;
   pathInput.value = data.path || "/sse";
-  layoutInput.value = data.layout || "classic";
+  layoutInput.value = data.layout || "dashboard";
+  cpuNameInput.value = data.cpu_name || "CPU";
+  gpuNameInput.value = data.gpu_name || "GPU";
+  accentColorInput.value = data.accent_color || "#E7C21D";
+  syncAccentAvailability();
   downloadLink.href = API + "/download";
   syncPreview();
   setStatus("当前配置已载入。", "ok");
@@ -423,7 +487,10 @@ async function saveConfig(ev){
     host: hostInput.value.trim(),
     port: portInput.value.trim(),
     path: normalizePath(pathInput.value),
-    layout: layoutInput.value
+    layout: layoutInput.value,
+    cpu_name: cpuNameInput.value.trim(),
+    gpu_name: gpuNameInput.value.trim(),
+    accent_color: accentColorInput.value
   });
   const res = await fetch(API + "/save?" + params.toString(), {cache:"no-store"});
   const data = await res.json();
@@ -434,6 +501,9 @@ async function saveConfig(ev){
   portInput.value = data.port || portInput.value;
   pathInput.value = data.path || pathInput.value;
   layoutInput.value = data.layout || layoutInput.value;
+  cpuNameInput.value = data.cpu_name || cpuNameInput.value;
+  gpuNameInput.value = data.gpu_name || gpuNameInput.value;
+  accentColorInput.value = data.accent_color || accentColorInput.value;
   syncPreview();
   setStatus("已保存，Holo PC Monitor 正在按新地址重连。", "ok");
 }
@@ -446,6 +516,7 @@ document.getElementById("testUrl").addEventListener("click", () => {
   window.open(currentUrl(), "_blank", "noopener");
 });
 [hostInput, portInput, pathInput].forEach((input) => input.addEventListener("input", syncPreview));
+layoutInput.addEventListener("change", syncAccentAvailability);
 
 loadState().catch((err) => setStatus("配置读取失败：" + err.message, "error"));
 </script>
@@ -471,13 +542,20 @@ function Web.new(opts)
     local host = tostring(self.config.host or "")
     local port = tonumber(self.config.port) or 80
     local path = normalize_path(self.config.path or "/sse")
-    local layout = self.config.layout == "dashboard" and "dashboard" or "classic"
+    local layout = tostring(self.config.layout or "dashboard")
+    local cpu_name = text_or(self.config.cpu_name, "CPU")
+    local gpu_name = text_or(self.config.gpu_name, "GPU")
+    local accent_color = string.format("#%06X", tonumber(self.config.accent_color) or 0xE7C21D)
+    if layout ~= "classic" and layout ~= "hex" then layout = "dashboard" end
     return {
       ok = ok ~= false,
       host = host,
       port = port,
       path = path,
       layout = layout,
+      cpu_name = cpu_name,
+      gpu_name = gpu_name,
+      accent_color = accent_color,
       url = "http://" .. host .. ":" .. tostring(port) .. path,
       message = message or "",
     }
@@ -513,7 +591,26 @@ function Web.new(opts)
     local host = trim(q.host)
     local port = tonumber(q.port) or 80
     local path = normalize_path(q.path)
-    local layout = q.layout == "dashboard" and "dashboard" or "classic"
+    local layout = tostring(q.layout or "dashboard")
+    local cpu_name = trim(q.cpu_name)
+    local gpu_name = trim(q.gpu_name)
+    local accent_raw = trim(q.accent_color):gsub("^#", "")
+    local accent_color = accent_raw:match("^%x%x%x%x%x%x$") and tonumber(accent_raw, 16) or nil
+    if cpu_name == "" then cpu_name = "CPU" end
+    if gpu_name == "" then gpu_name = "GPU" end
+    cpu_name = cpu_name:sub(1, 64)
+    gpu_name = gpu_name:sub(1, 64)
+    if layout ~= "classic" and layout ~= "hex" then layout = "dashboard" end
+
+    if not accent_color then
+      return json_response("400 Bad Request", {
+        ok = false,
+        host = self.config.host,
+        port = self.config.port,
+        path = self.config.path,
+        error = "请选择有效的六位颜色",
+      })
+    end
 
     if not valid_ipv4(host) then
       return json_response("400 Bad Request", {
@@ -538,6 +635,9 @@ function Web.new(opts)
     self.config.port = math.floor(port)
     self.config.path = path
     self.config.layout = layout
+    self.config.cpu_name = cpu_name
+    self.config.gpu_name = gpu_name
+    self.config.accent_color = accent_color
 
     local ok, err = write_config(self.config_path, self.config)
     if not ok then
