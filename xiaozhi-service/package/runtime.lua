@@ -921,6 +921,11 @@ end
       end
       if event == "need_config" then
         self.ui:set_chat_message("system", data or "未配置 ota.url")
+      elseif event == "waiting_mac" then
+        self.activation_message = "正在读取设备 MAC"
+        set_state(State.ACTIVATING)
+        self.ui:set_status("等待设备 MAC")
+        self.ui:set_chat_message("system", self.activation_message)
       elseif event == "checking" then
         set_state(State.ACTIVATING)
         self.ui:set_status("检查 OTA")
