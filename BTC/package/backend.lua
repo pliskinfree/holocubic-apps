@@ -8,6 +8,7 @@ local ERROR_RETRY_MS = 6000
 local HTTP_TIMEOUT_MS = 12000
 local FX_REFRESH_MS = 30 * 60 * 1000
 local FX_FALLBACK_USD_CNY = 7.20
+local FX_FALLBACK_USD_TWD = 32.50
 local FX_URL = "https://open.er-api.com/v6/latest/USD"
 local TROY_OUNCE_GRAMS = 31.1034768
 local POUND_GRAMS = 453.59237
@@ -15,6 +16,7 @@ local POUND_GRAMS = 453.59237
 local CURRENCIES = {
   { value = "USD", text = "美金" },
   { value = "CNY", text = "人民币" },
+  { value = "TWD", text = "新台币" },
 }
 
 local INTERVALS = {
@@ -50,6 +52,13 @@ local PRESET_ASSETS = {
   { id = "ashare:1.600519", group = "ashare", source = "eastmoney", symbol = "600519", secid = "1.600519", text = "贵州茅台", quote = "CNY" },
   { id = "ashare:0.000001", group = "ashare", source = "eastmoney", symbol = "000001", secid = "0.000001", text = "平安银行", quote = "CNY" },
   { id = "ashare:0.300750", group = "ashare", source = "eastmoney", symbol = "300750", secid = "0.300750", text = "宁德时代", quote = "CNY" },
+  { id = "taiwan:^TWII", group = "taiwan", source = "eastmoney", symbol = "^TWII", secid = "100.TWII", text = "台湾加权指数", quote = "TWD" },
+  { id = "taiwan:2330.TW", group = "taiwan", source = "eastmoney", symbol = "2330.TW", secid = "178.2330", text = "台积电", quote = "TWD" },
+  { id = "taiwan:2317.TW", group = "taiwan", source = "eastmoney", symbol = "2317.TW", secid = "178.2317", text = "鸿海", quote = "TWD" },
+  { id = "taiwan:2454.TW", group = "taiwan", source = "eastmoney", symbol = "2454.TW", secid = "178.2454", text = "联发科", quote = "TWD" },
+  { id = "taiwan:2308.TW", group = "taiwan", source = "eastmoney", symbol = "2308.TW", secid = "178.2308", text = "台达电", quote = "TWD" },
+  { id = "taiwan:2881.TW", group = "taiwan", source = "eastmoney", symbol = "2881.TW", secid = "178.2881", text = "富邦金", quote = "TWD" },
+  { id = "taiwan:6488.TWO", group = "taiwan", source = "eastmoney", symbol = "6488.TWO", secid = "178.6488", text = "环球晶", quote = "TWD" },
 }
 
 -- 返回单调毫秒时间，用于刷新队列和按键节流。
@@ -238,13 +247,18 @@ local function normalize_currency(value)
   local text = tostring(value or ""):upper()
   if text == "CNY" or text == "RMB" or tostring(value or "") == "人民币" then
     return "CNY"
+  elseif text == "TWD" or text == "NTD" or text == "NT$" or tostring(value or "") == "新台币" then
+    return "TWD"
   end
   return "USD"
 end
 
 local function currency_text(value)
-  if normalize_currency(value) == "CNY" then
+  local currency = normalize_currency(value)
+  if currency == "CNY" then
     return "人民币"
+  elseif currency == "TWD" then
+    return "新台币"
   end
   return "美金"
 end
@@ -284,7 +298,7 @@ local function unit_text(asset)
   return ""
 end
 
-local function convert_currency(value, from_currency, to_currency, usd_cny)
+local function convert_currency(value, from_currency, to_currency, usd_cny, usd_twd)
   value = tonumber(value)
   if not value then
     return nil
@@ -292,18 +306,28 @@ local function convert_currency(value, from_currency, to_currency, usd_cny)
   from_currency = normalize_currency(from_currency)
   to_currency = normalize_currency(to_currency)
   usd_cny = tonumber(usd_cny) or FX_FALLBACK_USD_CNY
+  usd_twd = tonumber(usd_twd) or FX_FALLBACK_USD_TWD
   if from_currency == to_currency then
     return value
-  elseif from_currency == "USD" and to_currency == "CNY" then
-    return value * usd_cny
-  elseif from_currency == "CNY" and to_currency == "USD" and usd_cny ~= 0 then
-    return value / usd_cny
   end
-  return value
+
+  local usd_value = value
+  if from_currency == "CNY" and usd_cny ~= 0 then
+    usd_value = value / usd_cny
+  elseif from_currency == "TWD" and usd_twd ~= 0 then
+    usd_value = value / usd_twd
+  end
+
+  if to_currency == "CNY" then
+    return usd_value * usd_cny
+  elseif to_currency == "TWD" then
+    return usd_value * usd_twd
+  end
+  return usd_value
 end
 
 -- 把源价格转换为屏幕/Web 当前显示价格。
-local function display_price(asset, value, target_currency, usd_cny)
+local function display_price(asset, value, target_currency, usd_cny, usd_twd)
   local v = tonumber(value)
   if not v then
     return nil
@@ -319,7 +343,7 @@ local function display_price(asset, value, target_currency, usd_cny)
     base_currency = "USD"
   end
 
-  return convert_currency(v, base_currency, target_currency, usd_cny)
+  return convert_currency(v, base_currency, target_currency, usd_cny, usd_twd)
 end
 
 -- 复制资产字段，避免 Web 修改快照时污染运行状态。
@@ -414,13 +438,22 @@ local function restore_custom_asset(value)
   if id == "" or source == "" or symbol == "" then
     return nil
   end
-  if source ~= "binance" and source ~= "yahoo" and source ~= "eastmoney" then
+  if source ~= "binance" and source ~= "yahoo" and source ~= "eastmoney" and source ~= "twse" then
     return nil
   end
 
   local group = tostring(value.group or "")
-  if group ~= "crypto" and group ~= "nasdaq" and group ~= "metal" and group ~= "ashare" then
+  if group ~= "crypto" and group ~= "nasdaq" and group ~= "metal" and group ~= "ashare" and group ~= "taiwan" then
     group = "crypto"
+  end
+
+  local migrated_secid = nil
+  if group == "taiwan" then
+    symbol = symbol:upper()
+    local code = symbol:gsub("%.TWO$", ""):gsub("%.TW$", "")
+    migrated_secid = symbol == "^TWII" and "100.TWII" or ("178." .. code)
+    source = "eastmoney"
+    id = "custom:eastmoney:" .. symbol
   end
 
   local asset = {
@@ -429,10 +462,10 @@ local function restore_custom_asset(value)
     source = source,
     symbol = symbol,
     text = tostring(value.text or symbol),
-    quote = normalize_currency(value.quote or (group == "ashare" and "CNY" or "USD")),
+    quote = normalize_currency(value.quote or (group == "ashare" and "CNY" or (group == "taiwan" and "TWD" or "USD"))),
   }
-  if value.secid then
-    asset.secid = tostring(value.secid)
+  if migrated_secid or value.secid then
+    asset.secid = migrated_secid or tostring(value.secid)
   end
   local unit = tostring(value.metal_unit or "")
   if unit == "oz" or unit == "lb" then
@@ -441,14 +474,15 @@ local function restore_custom_asset(value)
   return asset
 end
 
--- 解析 open.er-api.com 的 USD -> CNY 汇率。
-local function parse_usd_cny(doc)
+-- 解析 open.er-api.com 的 USD -> CNY/TWD 汇率。
+local function parse_fx_rates(doc)
   local rates = type(doc) == "table" and doc.rates
-  local rate = rates and tonumber(rates.CNY)
-  if rate and rate > 0 and rate < 20 then
-    return rate, nil
+  local cny = rates and tonumber(rates.CNY)
+  local twd = rates and tonumber(rates.TWD)
+  if cny and cny > 0 and cny < 20 and twd and twd > 10 and twd < 100 then
+    return cny, twd, nil
   end
-  return nil, "fx CNY missing"
+  return nil, nil, "fx CNY/TWD missing"
 end
 
 -- 简单 CSV 行拆分，东方财富 K 线字段不含引号。
@@ -521,6 +555,10 @@ end
 local function parse_yahoo(doc, asset)
   local chart = type(doc) == "table" and doc.chart
   local result = chart and chart.result and chart.result[1]
+  if type(result) ~= "table" and type(doc) == "table" and type(doc.data) == "table"
+      and type(doc.data[1]) == "table" then
+    result = doc.data[1].chart
+  end
   if type(result) ~= "table" then
     return nil, "chart empty"
   end
@@ -570,9 +608,15 @@ local function parse_eastmoney(doc, asset)
 
     local lines = {}
     for line in block:gmatch('"([^"]+)"') do
-      lines[#lines + 1] = line
-      if #lines > DEFAULT_LIMIT then
-        table.remove(lines, 1)
+      local fields = split_csv(line)
+      local volume = tonumber(fields[6]) or 0
+      -- Eastmoney 会为台湾市场补齐大量零成交量、价格不变的时间格；
+      -- 先丢弃这些占位行，否则最后 64 点几乎全是水平线。
+      if asset.group ~= "taiwan" or volume > 0 then
+        lines[#lines + 1] = line
+        if #lines > DEFAULT_LIMIT then
+          table.remove(lines, 1)
+        end
       end
     end
 
@@ -594,9 +638,13 @@ local function parse_eastmoney(doc, asset)
       end
     end
 
+    local prev_close = tonumber(doc:match('"preKPrice"%s*:%s*"?([%-%d%.]+)"?'))
+    if asset.group == "taiwan" and #candles > 1 then
+      prev_close = candles[#candles - 1].close
+    end
     return summarize(candles, {
       currency = asset.quote or "CNY",
-      prev_close = tonumber(doc:match('"preKPrice"%s*:%s*"?([%-%d%.]+)"?')),
+      prev_close = prev_close,
       name = doc:match('"name"%s*:%s*"([^"]*)"'),
     })
   end
@@ -613,7 +661,8 @@ local function parse_eastmoney(doc, asset)
     local close_p = tonumber(fields[3])
     local high_p = tonumber(fields[4])
     local low_p = tonumber(fields[5])
-    if open_p and close_p and high_p and low_p then
+    local volume = tonumber(fields[6]) or 0
+    if open_p and close_p and high_p and low_p and (asset.group ~= "taiwan" or volume > 0) then
       candles[#candles + 1] = {
         time = fields[1] or "",
         open = open_p,
@@ -624,9 +673,13 @@ local function parse_eastmoney(doc, asset)
     end
   end
 
+  local prev_close = tonumber(data.preKPrice)
+  if asset.group == "taiwan" and #candles > 1 then
+    prev_close = candles[#candles - 1].close
+  end
   return summarize(candles, {
     currency = asset.quote or "CNY",
-    prev_close = tonumber(data.preKPrice),
+    prev_close = prev_close,
     name = data.name,
   })
 end
@@ -639,7 +692,7 @@ local function build_url(asset, interval)
       .. "&interval=" .. interval.api_binance
       .. "&limit=" .. tostring(DEFAULT_LIMIT)
   elseif asset.source == "yahoo" then
-    return "https://query1.finance.yahoo.com/v8/finance/chart/"
+    return "https://query2.finance.yahoo.com/v8/finance/chart/"
       .. url_encode(asset.symbol)
       .. "?range=" .. interval.range_yahoo
       .. "&interval=" .. interval.api_yahoo
@@ -679,7 +732,7 @@ end
 -- Eastmoney 的 market 前缀同时覆盖 A 股、海外指数/股票和国际期货。
 local function normalize_eastmoney_market(market, symbol)
   market = trim(market)
-  if market == "0" or market == "1" or market == "100" or market == "101" or market == "105" then
+  if market == "0" or market == "1" or market == "100" or market == "101" or market == "105" or market == "178" then
     return market
   end
   return infer_eastmoney_market(symbol)
@@ -687,6 +740,9 @@ end
 
 -- 根据 Eastmoney market 前缀决定 Web 分类和显示币种。
 local function eastmoney_meta(market)
+  if market == "178" then
+    return "taiwan", "TWD"
+  end
   if market == "100" or market == "105" then
     return "nasdaq", "USD"
   elseif market == "101" then
@@ -718,20 +774,44 @@ local function make_custom_asset(params)
       text = text,
       quote = "USD",
     }
-  elseif source == "yahoo" then
+  elseif source == "yahoo" or source == "twse" then
     symbol = symbol:upper()
-    local group = params.group == "metal" and "metal" or "nasdaq"
+    local is_taiwan = params.group == "taiwan"
+      or symbol:match("%.TW$") ~= nil
+      or symbol:match("%.TWO$") ~= nil
+      or symbol == "^TWII"
+    local group = is_taiwan and "taiwan" or (params.group == "metal" and "metal" or "nasdaq")
+    local taiwan_code = symbol:gsub("%.TWO$", ""):gsub("%.TW$", "")
+    local taiwan_secid = symbol == "^TWII" and "100.TWII" or ("178." .. taiwan_code)
     return {
-      id = "custom:yahoo:" .. symbol,
+      id = "custom:" .. (is_taiwan and "eastmoney" or "yahoo") .. ":" .. symbol,
       group = group,
-      source = "yahoo",
+      source = is_taiwan and "eastmoney" or "yahoo",
       symbol = symbol,
       text = text,
-      quote = "USD",
+      quote = is_taiwan and "TWD" or "USD",
+      secid = is_taiwan and taiwan_secid or nil,
       metal_unit = group == "metal" and infer_metal_unit(symbol) or nil,
     }
   elseif source == "eastmoney" then
     symbol = symbol:upper()
+    local is_taiwan = params.group == "taiwan"
+      or symbol:match("%.TW$") ~= nil
+      or symbol:match("%.TWO$") ~= nil
+      or symbol == "^TWII"
+    if is_taiwan then
+      local code = symbol:gsub("%.TWO$", ""):gsub("%.TW$", "")
+      local secid = symbol == "^TWII" and "100.TWII" or ("178." .. code)
+      return {
+        id = "custom:eastmoney:" .. symbol,
+        group = "taiwan",
+        source = "eastmoney",
+        symbol = symbol,
+        secid = secid,
+        text = text,
+        quote = "TWD",
+      }
+    end
     local market = normalize_eastmoney_market(params.market, symbol)
     local group, quote = eastmoney_meta(market)
     local secid = market .. "." .. symbol
@@ -788,6 +868,7 @@ function Backend.new(opts)
       change_pct = nil,
       currency = "",
       fx_rate = FX_FALLBACK_USD_CNY,
+      fx_twd_rate = FX_FALLBACK_USD_TWD,
       fx_updated_text = "--",
       fx_last_error = "",
       fx_next_fetch_at = 0,
@@ -855,6 +936,10 @@ function Backend.new(opts)
     local asset_id = cfg.asset_id or cfg.asset
     if asset_id and self:find_asset(asset_id) then
       self.settings.asset_id = asset_id
+    elseif custom and tostring(asset_id or ""):match("^custom:") then
+      -- 旧版台股自定义项可能保存为 custom:yahoo:*；restore 后已经迁移成
+      -- custom:eastmoney:*，同步更新选中 ID，避免重启后意外回退到 BTC。
+      self.settings.asset_id = custom.id
     end
     if cfg.interval then
       local interval = find_interval(cfg.interval)
@@ -979,10 +1064,11 @@ function Backend.new(opts)
     s.fx_next_fetch_at = now_ms() + FX_REFRESH_MS
   end
 
-  -- 应用 USD/CNY 汇率，切换人民币显示时自动重绘图表。
-  function self:apply_fx(rate)
+  -- 应用 USD/CNY、USD/TWD 汇率，切换显示币种时自动重绘图表。
+  function self:apply_fx(cny_rate, twd_rate)
     local s = self.state
-    s.fx_rate = tonumber(rate) or s.fx_rate or FX_FALLBACK_USD_CNY
+    s.fx_rate = tonumber(cny_rate) or s.fx_rate or FX_FALLBACK_USD_CNY
+    s.fx_twd_rate = tonumber(twd_rate) or s.fx_twd_rate or FX_FALLBACK_USD_TWD
     s.fx_updated_text = clock_text()
     s.fx_last_error = ""
     s.fx_next_fetch_at = now_ms() + FX_REFRESH_MS
@@ -1015,10 +1101,9 @@ function Backend.new(opts)
       s.tone = "warn"
     end
 
+    -- 某些固件不会把响应 Content-Encoding 头完整传回 Lua；固定请求明文，
+    -- 避免 Yahoo 返回 gzip 后被误当作 JSON/文本解析。
     local accept_encoding = "identity"
-    if zlib and zlib.isgzip and zlib.gunzip then
-      accept_encoding = "gzip, identity"
-    end
     local headers =
       "Accept: application/json\r\n"
       .. "Accept-Language: zh-CN,zh;q=0.9,en;q=0.8\r\n"
@@ -1103,7 +1188,7 @@ function Backend.new(opts)
     end)
   end
 
-  -- 开机和每 30 分钟同步一次公开 USD/CNY 汇率。
+  -- 开机和每 30 分钟同步一次公开 USD/CNY、USD/TWD 汇率。
   function self:fetch_fx()
     if self.state.http_busy then
       return false
@@ -1113,12 +1198,12 @@ function Backend.new(opts)
         self:fail_fx(err or ("fx http " .. tostring(code)))
         return
       end
-      local rate, perr = parse_usd_cny(doc)
-      if not rate then
+      local cny_rate, twd_rate, perr = parse_fx_rates(doc)
+      if not cny_rate or not twd_rate then
         self:fail_fx(perr or "fx parse")
         return
       end
-      self:apply_fx(rate)
+      self:apply_fx(cny_rate, twd_rate)
     end)
   end
 
@@ -1217,6 +1302,14 @@ function Backend.new(opts)
       self.settings.asset_id = asset_id
       data_changed = true
       settings_changed = true
+      if not params.currency and not params.display_currency then
+        local selected_asset = self:find_asset(asset_id)
+        local native_currency = normalize_currency(selected_asset and selected_asset.quote)
+        if native_currency ~= self.settings.currency then
+          self.settings.currency = native_currency
+          chart_changed = true
+        end
+      end
     end
 
     if params.interval then
@@ -1289,6 +1382,7 @@ function Backend.new(opts)
 
     local target_currency = normalize_currency(self.settings.currency)
     local fx_rate = tonumber(s.fx_rate) or FX_FALLBACK_USD_CNY
+    local fx_twd_rate = tonumber(s.fx_twd_rate) or FX_FALLBACK_USD_TWD
     local points = {}
     local display_min = nil
     local display_max = nil
@@ -1298,11 +1392,11 @@ function Backend.new(opts)
     end
     for i = start_i, #s.candles do
       local c = s.candles[i]
-      local close_p = display_price(asset, c.close, target_currency, fx_rate)
+      local close_p = display_price(asset, c.close, target_currency, fx_rate, fx_twd_rate)
       if close_p then
-        local open_p = display_price(asset, c.open, target_currency, fx_rate) or close_p
-        local high_p = display_price(asset, c.high, target_currency, fx_rate) or math.max(open_p, close_p)
-        local low_p = display_price(asset, c.low, target_currency, fx_rate) or math.min(open_p, close_p)
+        local open_p = display_price(asset, c.open, target_currency, fx_rate, fx_twd_rate) or close_p
+        local high_p = display_price(asset, c.high, target_currency, fx_rate, fx_twd_rate) or math.max(open_p, close_p)
+        local low_p = display_price(asset, c.low, target_currency, fx_rate, fx_twd_rate) or math.min(open_p, close_p)
         if low_p and (not display_min or low_p < display_min) then
           display_min = low_p
         end
@@ -1319,18 +1413,18 @@ function Backend.new(opts)
       end
     end
 
-    local display_current = display_price(asset, s.current_price, target_currency, fx_rate)
+    local display_current = display_price(asset, s.current_price, target_currency, fx_rate, fx_twd_rate)
     if not display_current and #points > 0 then
       display_current = points[#points].close
     end
-    local display_prev = display_price(asset, s.prev_close, target_currency, fx_rate)
+    local display_prev = display_price(asset, s.prev_close, target_currency, fx_rate, fx_twd_rate)
     local display_change = display_current and display_prev and (display_current - display_prev) or nil
     local display_pct = s.change_pct
     if not display_pct and display_current and display_prev and display_prev ~= 0 then
       display_pct = (display_current - display_prev) * 100 / display_prev
     end
-    display_min = display_min or display_price(asset, s.min_price, target_currency, fx_rate)
-    display_max = display_max or display_price(asset, s.max_price, target_currency, fx_rate)
+    display_min = display_min or display_price(asset, s.min_price, target_currency, fx_rate, fx_twd_rate)
+    display_max = display_max or display_price(asset, s.max_price, target_currency, fx_rate, fx_twd_rate)
 
     return {
       ok = true,
@@ -1372,6 +1466,7 @@ function Backend.new(opts)
       updated_text = s.last_update_text,
       now_text = clock_text(),
       fx_rate = fx_rate,
+      fx_twd_rate = fx_twd_rate,
       fx_updated_text = s.fx_updated_text,
       fx_loading = s.fx_loading,
       fx_error = s.fx_last_error,
@@ -1383,8 +1478,12 @@ function Backend.new(opts)
 
   -- 停止后端，当前实现无持久资源，只保留接口对称。
   function self:stop(reason)
+    self.state.http_req_id = (self.state.http_req_id or 0) + 1
     self.state.http_busy = false
+    self.state.http_job = ""
+    self.state.http_started_ms = 0
     self.state.loading = false
+    self.state.fx_loading = false
   end
 
   self:load_settings()

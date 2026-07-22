@@ -308,7 +308,7 @@
       <div>
         <p class="kicker" data-i18n="kicker">多市场行情工具</p>
         <h1 id="title">Ticker</h1>
-        <p class="summary" data-i18n="summary">查看加密货币、美股/A 股、指数和金银铜走势，支持折线与 K 线视图。</p>
+        <p class="summary" data-i18n="summary">查看加密货币、美股/A 股、台股、指数和金银铜走势，支持折线与 K 线视图。</p>
       </div>
       <button class="lang-toggle" type="button" data-lang-toggle aria-label="Switch to English">EN</button>
     </section>
@@ -317,7 +317,7 @@
       <section class="panel" aria-labelledby="support-title">
         <h2 id="support-title" data-i18n="supportTitle">支持标的</h2>
         <div class="chips" id="supported-assets" aria-label="内置标的"></div>
-        <p class="note" data-i18n="customNote">Web 控制页还可添加自定义 Binance 交易对，或通过 Eastmoney 市场编号添加沪深 A 股、纳指/美股和金银铜期货代码。</p>
+        <p class="note" data-i18n="customNote">Web 控制页还可添加自定义 Binance 交易对，或通过 Eastmoney 添加沪深 A 股、台股、指数和金银铜期货代码。</p>
       </section>
 
       <section class="panel" aria-labelledby="source-title">
@@ -328,14 +328,23 @@
             <strong>Binance public market data</strong>
           </div>
           <div class="source">
-            <span data-i18n="eastmoneyLabel">股票、指数、金银铜</span>
+            <span data-i18n="eastmoneyLabel">股票、台股、指数、金银铜</span>
             <strong>Eastmoney public market data</strong>
           </div>
           <div class="source">
-            <span data-i18n="fxLabel">美元/人民币汇率</span>
+            <span data-i18n="fxLabel">美元/人民币/新台币汇率</span>
             <strong>open.er-api.com</strong>
           </div>
+          <div class="source">
+            <span data-i18n="backupMarketLabel">兼容/备用证券来源</span>
+            <strong>Yahoo Finance</strong>
+          </div>
+          <div class="source">
+            <span data-i18n="backupFxLabel">离线汇率兜底</span>
+            <strong data-i18n="backupFxValue">内置 USD/CNY 与 USD/TWD 参考值</strong>
+          </div>
         </div>
+        <p class="note" data-i18n="sourceNote">台股和内置美股固定使用 Eastmoney。Yahoo Finance 仅用于兼容旧版自定义配置，可能受地区访问策略限制；汇率接口不可用时采用内置参考值维持显示，不代表实时汇率。</p>
         <p class="note" data-i18n="riskNote">行情仅用于显示和观察，不构成投资建议；网络或公开接口异常时数据可能延迟。</p>
       </section>
 
@@ -352,7 +361,11 @@
           </li>
           <li>
             <span class="badge">3</span>
-            <span><strong data-i18n="featureThreeTitle">币种显示</strong><span data-i18n="featureThreeText">支持 USD 与 CNY 显示，金银铜按每克换算。</span></span>
+            <span><strong data-i18n="featureThreeTitle">币种显示</strong><span data-i18n="featureThreeText">支持 USD、CNY 与 TWD 显示，金银铜按每克换算。</span></span>
+          </li>
+          <li>
+            <span class="badge">4</span>
+            <span><strong data-i18n="featureFourTitle">1.2.0 更新说明</strong><span data-i18n="featureFourText">新增台股、TWD 与繁体中文；修复台股折线、涨跌计算和 Web 空白问题，并改用公开 HTTPS 原始数据地址。</span></span>
           </li>
         </ul>
       </section>
@@ -361,11 +374,11 @@
         <div class="meta">
           <div class="meta-item">
             <span class="label" data-i18n="sizeLabel">安装包大小</span>
-            <span class="value" data-i18n="sizeValue">约 315 KB</span>
+            <span class="value" data-i18n="sizeValue">约 878 KB</span>
           </div>
           <div class="meta-item">
             <span class="label" data-i18n="versionLabel">版本号</span>
-            <span class="value">1.1.2</span>
+            <span class="value">1.2.0</span>
           </div>
         </div>
       </section>    </div>
@@ -386,13 +399,17 @@
           toggleText: "EN",
           iconAlt: "Ticker 应用图标",
           kicker: "多市场行情工具",
-          summary: "查看加密货币、美股/A 股、指数和金银铜走势，支持折线与 K 线视图。",
+          summary: "查看加密货币、美股/A 股、台股、指数和金银铜走势，支持折线与 K 线视图。",
           supportTitle: "支持标的",
-          customNote: "Web 控制页还可添加自定义 Binance 交易对，或通过 Eastmoney 市场编号添加沪深 A 股、纳指/美股和金银铜期货代码。",
+          customNote: "Web 控制页还可添加自定义 Binance 交易对，或通过 Eastmoney 添加沪深 A 股、台股、指数和金银铜期货代码。",
           sourceTitle: "信息来源",
           binanceLabel: "币价",
-          eastmoneyLabel: "股票、指数、金银铜",
-          fxLabel: "美元/人民币汇率",
+          eastmoneyLabel: "股票、台股、指数、金银铜",
+          fxLabel: "美元/人民币/新台币汇率",
+          backupMarketLabel: "兼容/备用证券来源",
+          backupFxLabel: "离线汇率兜底",
+          backupFxValue: "内置 USD/CNY 与 USD/TWD 参考值",
+          sourceNote: "台股和内置美股固定使用 Eastmoney。Yahoo Finance 仅用于兼容旧版自定义配置，可能受地区访问策略限制；汇率接口不可用时采用内置参考值维持显示，不代表实时汇率。",
           riskNote: "行情仅用于显示和观察，不构成投资建议；网络或公开接口异常时数据可能延迟。",
           featureTitle: "功能说明",
           featureOneTitle: "多周期走势",
@@ -400,10 +417,12 @@
           featureTwoTitle: "图表切换",
           featureTwoText: "支持折线、K 线，以及 MA10 / MA20 均线。",
           featureThreeTitle: "币种显示",
-          featureThreeText: "支持 USD 与 CNY 显示，金银铜按每克换算。",
+          featureThreeText: "支持 USD、CNY 与 TWD 显示，金银铜按每克换算。",
+          featureFourTitle: "1.2.0 更新说明",
+          featureFourText: "新增台股、TWD 与繁体中文；修复台股折线、涨跌计算和 Web 空白问题，并改用公开 HTTPS 原始数据地址。",
           appInfoTitle: "应用信息",
           sizeLabel: "安装包大小",
-          sizeValue: "约 315 KB",
+          sizeValue: "约 878 KB",
           versionLabel: "版本号",
           licenseText: "开源协议：GPL-3.0",
           repoLabel: "Git 地址："
@@ -414,13 +433,17 @@
           toggleText: "中文",
           iconAlt: "Ticker app icon",
           kicker: "Multi-market quote tool",
-          summary: "Track crypto, US and A-share stocks, indexes, and metal futures with line or candlestick views.",
+          summary: "Track crypto, US and A-share stocks, Taiwan stocks, indexes, and metal futures with line or candlestick views.",
           supportTitle: "Supported Symbols",
-          customNote: "The Web console can also add custom Binance pairs, or Eastmoney symbols for Shanghai/Shenzhen A-shares, Nasdaq/US stocks, and metal futures.",
+          customNote: "The Web console can also add custom Binance pairs, or Eastmoney symbols for A-shares, Taiwan stocks, indexes, and metal futures.",
           sourceTitle: "Data Sources",
           binanceLabel: "Crypto quotes",
-          eastmoneyLabel: "Stocks, indexes, and metals",
-          fxLabel: "USD/CNY FX rate",
+          eastmoneyLabel: "Stocks, Taiwan stocks, indexes, and metals",
+          fxLabel: "USD/CNY/TWD FX rates",
+          backupMarketLabel: "Compatible / backup market source",
+          backupFxLabel: "Offline FX fallback",
+          backupFxValue: "Built-in USD/CNY and USD/TWD reference rates",
+          sourceNote: "Taiwan presets and built-in US stocks use Eastmoney. Yahoo Finance is retained only for legacy custom settings and may be region-restricted. Built-in FX reference rates keep the UI available when the live FX service fails; they are not real-time quotes.",
           riskNote: "Quotes are for display and observation only, not financial advice. Data may be delayed when the network or public APIs fail.",
           featureTitle: "Features",
           featureOneTitle: "Multiple intervals",
@@ -428,10 +451,12 @@
           featureTwoTitle: "Chart modes",
           featureTwoText: "Supports line charts, candlesticks, and MA10 / MA20 moving averages.",
           featureThreeTitle: "Display currency",
-          featureThreeText: "Supports USD and CNY display. Gold, silver, and copper are converted to price per gram.",
+          featureThreeText: "Supports USD, CNY, and TWD display. Gold, silver, and copper are converted to price per gram.",
+          featureFourTitle: "Version 1.2.0",
+          featureFourText: "Adds Taiwan stocks, TWD, and Traditional Chinese; fixes Taiwan charts, change calculations, and the blank Web page; and uses public HTTPS source URLs.",
           appInfoTitle: "App Info",
           sizeLabel: "Package size",
-          sizeValue: "About 315 KB",
+          sizeValue: "About 878 KB",
           versionLabel: "Version",
           licenseText: "Open source license: GPL-3.0",
           repoLabel: "Git: "
@@ -492,7 +517,14 @@
         { logo: createLogoImage("创"), label: "创业板" },
         { logo: createLogoImage("茅"), label: "贵州茅台" },
         { logo: createLogoImage("平"), label: "平安银行" },
-        { logo: createLogoImage("宁"), label: "宁德时代" }
+        { logo: createLogoImage("宁"), label: "宁德时代" },
+        { logo: createLogoImage("台"), label: "加权指数" },
+        { logo: createLogoImage("台"), label: "台积电" },
+        { logo: createLogoImage("鸿"), label: "鸿海" },
+        { logo: createLogoImage("联"), label: "联发科" },
+        { logo: createLogoImage("台"), label: "台达电" },
+        { logo: createLogoImage("富"), label: "富邦金" },
+        { logo: createLogoImage("环"), label: "环球晶" }
       ];
 
       var toggle = document.querySelector("[data-lang-toggle]");
@@ -571,6 +603,5 @@
       applyLang(lang);
     }());
   </script>
-<section class="controller-support" style="width:calc(100% - 28px);max-width:932px;margin:14px auto 0;padding:14px 16px;border:1px solid rgba(59,130,246,.22);border-left:4px solid #3b82f6;border-radius:12px;background:linear-gradient(135deg,rgba(239,246,255,.98),rgba(255,255,255,.98));box-shadow:0 8px 24px rgba(37,99,235,.08)"><h2 style="margin:0 0 6px;color:#1d4ed8;font-size:15px;line-height:1.35">蓝牙手柄控制</h2><p style="margin:0;color:#475569;font-size:13px;line-height:1.65">左右：切换资产；上下：切换周期；Menu：打开设置；A：确认；B：返回；Select/Home：返回桌面。</p></section>
 </body>
 </html>

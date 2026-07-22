@@ -26,22 +26,22 @@ local TEXT = {
   ["zh-CN"] = {
     starting = "正在启动", waiting = "等待数据", no_price = "暂无价格", market = "行情",
     sync = "同步", ready = "就绪", loading = "加载中", cold = "启动中", error = "错误",
-    line = "折线", updated = "更新", points = "点", usd = "美金", cny = "人民币",
+    line = "折线", updated = "更新", points = "点", usd = "美金", cny = "人民币", twd = "新台币",
   },
   en = {
     starting = "Starting", waiting = "Waiting for data", no_price = "No price", market = "Market",
     sync = "SYNC", ready = "READY", loading = "LOADING", cold = "STARTING", error = "ERROR",
-    line = "Line", updated = "UPD", points = "pts", usd = "USD", cny = "CNY",
+    line = "Line", updated = "UPD", points = "pts", usd = "USD", cny = "CNY", twd = "TWD",
   },
   ja = {
     starting = "起動中", waiting = "データ待ち", no_price = "価格なし", market = "相場",
     sync = "同期", ready = "準備完了", loading = "読込中", cold = "起動中", error = "エラー",
-    line = "折線", updated = "更新", points = "点", usd = "米ドル", cny = "人民元",
+    line = "折線", updated = "更新", points = "点", usd = "米ドル", cny = "人民元", twd = "台湾ドル",
   },
   ["zh-TW"] = {
     starting = "正在啟動", waiting = "等待資料", no_price = "暫無價格", market = "行情",
     sync = "同步", ready = "就緒", loading = "載入中", cold = "啟動中", error = "錯誤",
-    line = "折線", updated = "更新", points = "點", usd = "美元", cny = "人民幣",
+    line = "折線", updated = "更新", points = "點", usd = "美元", cny = "人民幣", twd = "新台幣",
   },
 }
 
@@ -52,6 +52,8 @@ local ASSET_NAMES = {
     ["ashare:1.000001"] = "上证指数", ["ashare:1.000300"] = "沪深300", ["ashare:1.000905"] = "中证500",
     ["ashare:1.000852"] = "中证1000", ["ashare:0.399001"] = "深证成指", ["ashare:0.399006"] = "创业板指",
     ["ashare:1.600519"] = "贵州茅台", ["ashare:0.000001"] = "平安银行", ["ashare:0.300750"] = "宁德时代",
+    ["taiwan:^TWII"] = "台湾加权指数", ["taiwan:2330.TW"] = "台积电", ["taiwan:2317.TW"] = "鸿海",
+    ["taiwan:2454.TW"] = "联发科", ["taiwan:2308.TW"] = "台达电", ["taiwan:2881.TW"] = "富邦金", ["taiwan:6488.TWO"] = "环球晶",
   },
   en = {
     ["nasdaq:100.NDX"] = "Nasdaq", ["nasdaq:100.NDX100"] = "Nasdaq 100",
@@ -59,6 +61,8 @@ local ASSET_NAMES = {
     ["ashare:1.000001"] = "SSE Composite", ["ashare:1.000300"] = "CSI 300", ["ashare:1.000905"] = "CSI 500",
     ["ashare:1.000852"] = "CSI 1000", ["ashare:0.399001"] = "SZSE Component", ["ashare:0.399006"] = "ChiNext",
     ["ashare:1.600519"] = "Kweichow Moutai", ["ashare:0.000001"] = "Ping An Bank", ["ashare:0.300750"] = "CATL",
+    ["taiwan:^TWII"] = "TAIEX", ["taiwan:2330.TW"] = "TSMC", ["taiwan:2317.TW"] = "Hon Hai",
+    ["taiwan:2454.TW"] = "MediaTek", ["taiwan:2308.TW"] = "Delta Electronics", ["taiwan:2881.TW"] = "Fubon Financial", ["taiwan:6488.TWO"] = "GlobalWafers",
   },
   ja = {
     ["nasdaq:100.NDX"] = "ナスダック", ["nasdaq:100.NDX100"] = "ナスダック100",
@@ -66,6 +70,8 @@ local ASSET_NAMES = {
     ["ashare:1.000001"] = "上海総合", ["ashare:1.000300"] = "CSI 300", ["ashare:1.000905"] = "CSI 500",
     ["ashare:1.000852"] = "CSI 1000", ["ashare:0.399001"] = "深圳成分", ["ashare:0.399006"] = "創業板",
     ["ashare:1.600519"] = "貴州茅台", ["ashare:0.000001"] = "平安銀行", ["ashare:0.300750"] = "CATL",
+    ["taiwan:^TWII"] = "台湾加権指数", ["taiwan:2330.TW"] = "TSMC", ["taiwan:2317.TW"] = "鴻海",
+    ["taiwan:2454.TW"] = "MediaTek", ["taiwan:2308.TW"] = "デルタ電子", ["taiwan:2881.TW"] = "富邦金控", ["taiwan:6488.TWO"] = "GlobalWafers",
   },
   ["zh-TW"] = {
     ["nasdaq:100.NDX"] = "那斯達克", ["nasdaq:100.NDX100"] = "那斯達克100",
@@ -73,6 +79,8 @@ local ASSET_NAMES = {
     ["ashare:1.000001"] = "上證指數", ["ashare:1.000300"] = "滬深300", ["ashare:1.000905"] = "中證500",
     ["ashare:1.000852"] = "中證1000", ["ashare:0.399001"] = "深證成指", ["ashare:0.399006"] = "創業板指",
     ["ashare:1.600519"] = "貴州茅台", ["ashare:0.000001"] = "平安銀行", ["ashare:0.300750"] = "寧德時代",
+    ["taiwan:^TWII"] = "臺灣加權指數", ["taiwan:2330.TW"] = "台積電", ["taiwan:2317.TW"] = "鴻海",
+    ["taiwan:2454.TW"] = "聯發科", ["taiwan:2308.TW"] = "台達電", ["taiwan:2881.TW"] = "富邦金", ["taiwan:6488.TWO"] = "環球晶",
   },
 }
 

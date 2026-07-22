@@ -194,7 +194,8 @@ canvas{display:block;width:100%;height:100%}
 .stat strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .controls{padding:16px;display:grid;gap:14px}
 .seg{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
-.currency-seg{grid-template-columns:repeat(2,minmax(0,1fr))}
+#groupButtons{grid-template-columns:repeat(5,minmax(0,1fr))}
+.currency-seg{grid-template-columns:repeat(3,minmax(0,1fr))}
 .seg button,.actions button{
   min-height:38px;
   border:1px solid var(--line);
@@ -296,6 +297,7 @@ select:focus,input:focus,button:focus-visible{border-color:rgba(10,132,255,.5);b
         <button data-group="nasdaq" data-i18n="nasdaq">纳斯达克</button>
         <button data-group="metal" data-i18n="metal">金银铜</button>
         <button data-group="ashare" data-i18n="ashare">A股</button>
+        <button data-group="taiwan" data-i18n="taiwan">台股</button>
       </div>
 
       <div class="field">
@@ -303,6 +305,7 @@ select:focus,input:focus,button:focus-visible{border-color:rgba(10,132,255,.5);b
         <div class="seg currency-seg" id="currencyButtons">
           <button data-currency="USD" data-i18n="usd">美金</button>
           <button data-currency="CNY" data-i18n="cny">人民币</button>
+          <button data-currency="TWD" data-i18n="twd">新台币</button>
         </div>
         <select class="hidden" id="currencySelect"></select>
       </div>
@@ -347,6 +350,7 @@ select:focus,input:focus,button:focus-visible{border-color:rgba(10,132,255,.5);b
           <select id="sourceSelect">
             <option value="binance" data-i18n="crypto">币价</option>
             <option value="eastmoney" data-i18n="eastmoney">Eastmoney公开</option>
+            <option value="twse" data-i18n="twse">台湾行情 (Eastmoney)</option>
           </select>
         </div>
         <div class="field" id="marketField">
@@ -379,7 +383,7 @@ select:focus,input:focus,button:focus-visible{border-color:rgba(10,132,255,.5);b
   </section>
   <footer class="site-footer">
     <div>Copyright &copy; 2026 clocteck. Licensed under GPL-3.0. Open source: <a href="https://github.com/clocteck" target="_blank" rel="noopener">github.com/clocteck</a>.</div>
-    <div>Data sources: Binance public market data, Eastmoney public market data, and open.er-api.com FX rates. For display only; not financial advice.</div>
+    <div>Data sources: Binance, Eastmoney, and open.er-api.com FX rates. Taiwan presets use Eastmoney public market data. For display only; not financial advice.</div>
   </footer>
 </main>
 
@@ -387,10 +391,10 @@ select:focus,input:focus,button:focus-visible{border-color:rgba(10,132,255,.5);b
 const API = "]=], api_prefix, [=[";
 const LANG = "]=], language, [=[";
 const MESSAGES = {
-  "zh-CN": {main:"主页",interval:"周期",high:"最高",low:"最低",updated:"更新",crypto:"币价",nasdaq:"纳斯达克",metal:"金银铜",ashare:"A股",currency:"显示币种",usd:"美金",cny:"人民币",asset:"标的",trend_interval:"走势周期",chart:"图表",line:"折线",candle:"K线",ma:"均线",off:"不显示",refresh:"刷新",custom:"自定义",source:"来源",eastmoney:"Eastmoney公开",market:"市场",shanghai:"沪市/指数",shenzhen:"深市",nasdaq_index:"纳斯达克指数",us_stock:"美股",metal_futures:"金银铜期货",symbol:"代码",name:"名称",add_view:"添加并查看",clear:"清空",loading:"加载中",ready:"就绪",cold:"启动中",error:"错误"},
-  en: {main:"Main",interval:"Interval",high:"High",low:"Low",updated:"Updated",crypto:"Crypto",nasdaq:"Nasdaq",metal:"Metals",ashare:"A-shares",currency:"Display currency",usd:"USD",cny:"CNY",asset:"Asset",trend_interval:"Trend interval",chart:"Chart",line:"Line",candle:"Candles",ma:"Moving average",off:"Off",refresh:"Refresh",custom:"Custom",source:"Source",eastmoney:"Eastmoney public",market:"Market",shanghai:"Shanghai / Index",shenzhen:"Shenzhen",nasdaq_index:"Nasdaq index",us_stock:"US stocks",metal_futures:"Metal futures",symbol:"Symbol",name:"Name",add_view:"Add and view",clear:"Clear",loading:"Loading",ready:"Ready",cold:"Starting",error:"Error"},
-  ja: {main:"メイン",interval:"期間",high:"高値",low:"安値",updated:"更新",crypto:"暗号資産",nasdaq:"ナスダック",metal:"金銀銅",ashare:"中国A株",currency:"表示通貨",usd:"米ドル",cny:"人民元",asset:"銘柄",trend_interval:"表示期間",chart:"チャート",line:"折線",candle:"ローソク",ma:"移動平均",off:"表示しない",refresh:"更新",custom:"カスタム",source:"データ元",eastmoney:"Eastmoney公開",market:"市場",shanghai:"上海 / 指数",shenzhen:"深圳",nasdaq_index:"ナスダック指数",us_stock:"米国株",metal_futures:"金属先物",symbol:"コード",name:"名称",add_view:"追加して表示",clear:"クリア",loading:"読込中",ready:"準備完了",cold:"起動中",error:"エラー"},
-  "zh-TW": {main:"主頁",interval:"週期",high:"最高",low:"最低",updated:"更新",crypto:"幣價",nasdaq:"那斯達克",metal:"金銀銅",ashare:"A股",currency:"顯示幣別",usd:"美元",cny:"人民幣",asset:"標的",trend_interval:"走勢週期",chart:"圖表",line:"折線",candle:"K線",ma:"均線",off:"不顯示",refresh:"重新整理",custom:"自訂",source:"來源",eastmoney:"Eastmoney公開",market:"市場",shanghai:"滬市/指數",shenzhen:"深市",nasdaq_index:"那斯達克指數",us_stock:"美股",metal_futures:"金銀銅期貨",symbol:"代碼",name:"名稱",add_view:"新增並檢視",clear:"清除",loading:"載入中",ready:"就緒",cold:"啟動中",error:"錯誤"}
+  "zh-CN": {main:"主页",interval:"周期",high:"最高",low:"最低",updated:"更新",crypto:"币价",nasdaq:"纳斯达克",metal:"金银铜",ashare:"A股",taiwan:"台股",currency:"显示币种",usd:"美金",cny:"人民币",twd:"新台币",asset:"标的",trend_interval:"走势周期",chart:"图表",line:"折线",candle:"K线",ma:"均线",off:"不显示",refresh:"刷新",custom:"自定义",source:"来源",eastmoney:"Eastmoney公开",yahoo:"Yahoo Finance",twse:"台湾行情 (Eastmoney)",market:"市场",shanghai:"沪市/指数",shenzhen:"深市",nasdaq_index:"纳斯达克指数",us_stock:"美股",metal_futures:"金银铜期货",symbol:"代码",name:"名称",add_view:"添加并查看",clear:"清空",loading:"加载中",ready:"就绪",cold:"启动中",error:"错误"},
+  en: {main:"Main",interval:"Interval",high:"High",low:"Low",updated:"Updated",crypto:"Crypto",nasdaq:"Nasdaq",metal:"Metals",ashare:"A-shares",taiwan:"Taiwan",currency:"Display currency",usd:"USD",cny:"CNY",twd:"TWD",asset:"Asset",trend_interval:"Trend interval",chart:"Chart",line:"Line",candle:"Candles",ma:"Moving average",off:"Off",refresh:"Refresh",custom:"Custom",source:"Source",eastmoney:"Eastmoney public",yahoo:"Yahoo Finance",twse:"Taiwan quotes (Eastmoney)",market:"Market",shanghai:"Shanghai / Index",shenzhen:"Shenzhen",nasdaq_index:"Nasdaq index",us_stock:"US stocks",metal_futures:"Metal futures",symbol:"Symbol",name:"Name",add_view:"Add and view",clear:"Clear",loading:"Loading",ready:"Ready",cold:"Starting",error:"Error"},
+  ja: {main:"メイン",interval:"期間",high:"高値",low:"安値",updated:"更新",crypto:"暗号資産",nasdaq:"ナスダック",metal:"金銀銅",ashare:"中国A株",taiwan:"台湾株",currency:"表示通貨",usd:"米ドル",cny:"人民元",twd:"台湾ドル",asset:"銘柄",trend_interval:"表示期間",chart:"チャート",line:"折線",candle:"ローソク",ma:"移動平均",off:"表示しない",refresh:"更新",custom:"カスタム",source:"データ元",eastmoney:"Eastmoney公開",yahoo:"Yahoo Finance",twse:"台湾相場 (Eastmoney)",market:"市場",shanghai:"上海 / 指数",shenzhen:"深圳",nasdaq_index:"ナスダック指数",us_stock:"米国株",metal_futures:"金属先物",symbol:"コード",name:"名称",add_view:"追加して表示",clear:"クリア",loading:"読込中",ready:"準備完了",cold:"起動中",error:"エラー"},
+  "zh-TW": {main:"主頁",interval:"週期",high:"最高",low:"最低",updated:"更新",crypto:"幣價",nasdaq:"那斯達克",metal:"金銀銅",ashare:"A股",taiwan:"台股",currency:"顯示幣別",usd:"美元",cny:"人民幣",twd:"新台幣",asset:"標的",trend_interval:"走勢週期",chart:"圖表",line:"折線",candle:"K線",ma:"均線",off:"不顯示",refresh:"重新整理",custom:"自訂",source:"來源",eastmoney:"Eastmoney公開",yahoo:"Yahoo Finance",twse:"臺灣行情 (Eastmoney)",market:"市場",shanghai:"滬市/指數",shenzhen:"深市",nasdaq_index:"那斯達克指數",us_stock:"美股",metal_futures:"金銀銅期貨",symbol:"代碼",name:"名稱",add_view:"新增並檢視",clear:"清除",loading:"載入中",ready:"就緒",cold:"啟動中",error:"錯誤"}
 };
 const MSG = MESSAGES[LANG] || MESSAGES["zh-CN"];
 const tr = (key) => MSG[key] || MESSAGES["zh-CN"][key] || key;
@@ -403,7 +407,7 @@ const ERROR_TEXT = {
 const errText = ERROR_TEXT[LANG] || ERROR_TEXT["zh-CN"];
 document.documentElement.lang = LANG;
 document.querySelectorAll("[data-i18n]").forEach((node) => { node.textContent = tr(node.dataset.i18n); });
-const groupText = { crypto: tr("crypto"), nasdaq: tr("nasdaq"), metal: tr("metal"), ashare: tr("ashare") };
+const groupText = { crypto: tr("crypto"), nasdaq: tr("nasdaq"), metal: tr("metal"), ashare: tr("ashare"), taiwan: tr("taiwan") };
 const els = {
   routeMeta: document.getElementById("routeMeta"),
   statusBadge: document.getElementById("statusBadge"),
@@ -453,10 +457,16 @@ function maLabel(value){
 }
 
 const ASSET_NAMES = {
+  "zh-CN": {"nasdaq:100.NDX":"纳斯达克","nasdaq:100.NDX100":"纳斯达克100","metal:101.GC00Y":"COMEX黄金","metal:101.SI00Y":"COMEX白银","metal:101.HG00Y":"COMEX铜","ashare:1.000001":"上证指数","ashare:1.000300":"沪深300","ashare:1.000905":"中证500","ashare:1.000852":"中证1000","ashare:0.399001":"深证成指","ashare:0.399006":"创业板指","ashare:1.600519":"贵州茅台","ashare:0.000001":"平安银行","ashare:0.300750":"宁德时代"},
   en: {"nasdaq:100.NDX":"Nasdaq","nasdaq:100.NDX100":"Nasdaq 100","metal:101.GC00Y":"COMEX Gold","metal:101.SI00Y":"COMEX Silver","metal:101.HG00Y":"COMEX Copper","ashare:1.000001":"SSE Composite","ashare:1.000300":"CSI 300","ashare:1.000905":"CSI 500","ashare:1.000852":"CSI 1000","ashare:0.399001":"SZSE Component","ashare:0.399006":"ChiNext","ashare:1.600519":"Kweichow Moutai","ashare:0.000001":"Ping An Bank","ashare:0.300750":"CATL"},
   ja: {"nasdaq:100.NDX":"ナスダック","nasdaq:100.NDX100":"ナスダック100","metal:101.GC00Y":"COMEX金","metal:101.SI00Y":"COMEX銀","metal:101.HG00Y":"COMEX銅","ashare:1.000001":"上海総合","ashare:1.000300":"CSI 300","ashare:1.000905":"CSI 500","ashare:1.000852":"CSI 1000","ashare:0.399001":"深圳成分","ashare:0.399006":"創業板","ashare:1.600519":"貴州茅台","ashare:0.000001":"平安銀行","ashare:0.300750":"CATL"},
   "zh-TW": {"nasdaq:100.NDX":"那斯達克","nasdaq:100.NDX100":"那斯達克100","metal:101.GC00Y":"COMEX黃金","metal:101.SI00Y":"COMEX白銀","metal:101.HG00Y":"COMEX銅","ashare:1.000001":"上證指數","ashare:1.000300":"滬深300","ashare:1.000905":"中證500","ashare:1.000852":"中證1000","ashare:0.399001":"深證成指","ashare:0.399006":"創業板指","ashare:1.600519":"貴州茅台","ashare:0.000001":"平安銀行","ashare:0.300750":"寧德時代"}
 };
+
+Object.assign(ASSET_NAMES["zh-CN"], {"taiwan:^TWII":"台湾加权指数","taiwan:2330.TW":"台积电","taiwan:2317.TW":"鸿海","taiwan:2454.TW":"联发科","taiwan:2308.TW":"台达电","taiwan:2881.TW":"富邦金","taiwan:6488.TWO":"环球晶"});
+Object.assign(ASSET_NAMES.en, {"taiwan:^TWII":"TAIEX","taiwan:2330.TW":"TSMC","taiwan:2317.TW":"Hon Hai","taiwan:2454.TW":"MediaTek","taiwan:2308.TW":"Delta Electronics","taiwan:2881.TW":"Fubon Financial","taiwan:6488.TWO":"GlobalWafers"});
+Object.assign(ASSET_NAMES.ja, {"taiwan:^TWII":"台湾加権指数","taiwan:2330.TW":"TSMC","taiwan:2317.TW":"鴻海","taiwan:2454.TW":"MediaTek","taiwan:2308.TW":"デルタ電子","taiwan:2881.TW":"富邦金控","taiwan:6488.TWO":"GlobalWafers"});
+Object.assign(ASSET_NAMES["zh-TW"], {"taiwan:^TWII":"臺灣加權指數","taiwan:2330.TW":"台積電","taiwan:2317.TW":"鴻海","taiwan:2454.TW":"聯發科","taiwan:2308.TW":"台達電","taiwan:2881.TW":"富邦金","taiwan:6488.TWO":"環球晶"});
 
 function assetDisplayName(asset){
   const map = ASSET_NAMES[LANG] || {};
@@ -468,9 +478,15 @@ function rateLabel(value){
   return Number.isFinite(rate) ? rate.toFixed(4) : "--";
 }
 
+function currencyLabel(value){
+  if(value === "CNY") return tr("cny");
+  if(value === "TWD") return tr("twd");
+  return tr("usd");
+}
+
 function redUpMarket(state){
   const group = state && state.active && state.active.group;
-  return group === "ashare" || group === "metal";
+  return group === "ashare" || group === "metal" || group === "taiwan";
 }
 
 function marketColors(state){
@@ -580,10 +596,10 @@ function renderOptions(state){
   });
 
   els.currencySelect.innerHTML = "";
-  (currencies.length ? currencies : [{ value: "USD", text: "美金" }, { value: "CNY", text: "人民币" }]).forEach((item) => {
+  (currencies.length ? currencies : [{ value: "USD", text: "美金" }, { value: "CNY", text: "人民币" }, { value: "TWD", text: "新台币" }]).forEach((item) => {
     const option = document.createElement("option");
     option.value = item.value;
-    option.textContent = item.value === "CNY" ? tr("cny") : tr("usd");
+    option.textContent = currencyLabel(item.value);
     els.currencySelect.appendChild(option);
   });
   currencyButtons();
@@ -788,6 +804,8 @@ function renderState(state){
   if(active.group && active.group !== activeGroup){
     activeGroup = active.group;
     optionsSignature = "";
+    els.sourceSelect.value = activeGroup === "crypto" ? "binance" : (activeGroup === "taiwan" ? "twse" : "eastmoney");
+    syncSourceFields();
   }
 
   groupButtons();
@@ -801,8 +819,10 @@ function renderState(state){
 
   setBadge(state.tone, state.loading ? tr("loading") : tr(state.status), state);
   const unit = safe(state.unit_text, "");
-  const currency = (state.currency === "CNY" ? tr("cny") : tr("usd")) + unit;
-  const fx = state.currency === "CNY" ? " · USD/CNY " + rateLabel(state.fx_rate) : "";
+  const currency = currencyLabel(state.currency) + unit;
+  const fx = state.currency === "CNY"
+    ? " · USD/CNY " + rateLabel(state.fx_rate)
+    : (state.currency === "TWD" ? " · USD/TWD " + rateLabel(state.fx_twd_rate) : "");
   els.routeMeta.textContent = safe(active.source, "--") + " · " + safe(active.symbol || active.secid, "--") + fx;
   els.assetName.textContent = assetDisplayName(active);
   els.assetMeta.textContent = (groupText[active.group] || safe(active.group, "--")) + " · " + currency;
@@ -858,6 +878,7 @@ async function applyCustom(){
   const source = els.sourceSelect.value;
   const query = new URLSearchParams({
     source,
+    group: activeGroup,
     symbol: els.symbolInput.value.trim(),
     name: els.nameInput.value.trim(),
     market: els.marketSelect.value,
@@ -881,6 +902,17 @@ function syncSourceFields(){
   if(source === "binance"){
     els.symbolInput.value = "BTCUSDT";
     els.nameInput.value = "BTC / USDT";
+  }else if(source === "twse"){
+    if(activeGroup === "taiwan"){
+      els.symbolInput.value = "2330.TW";
+      els.nameInput.value = assetDisplayName({id:"taiwan:2330.TW", text:"台积电", symbol:"2330.TW"});
+    }else if(activeGroup === "metal"){
+      els.symbolInput.value = "GC=F";
+      els.nameInput.value = "COMEX Gold";
+    }else{
+      els.symbolInput.value = "AAPL";
+      els.nameInput.value = "Apple";
+    }
   }else{
     if(activeGroup === "nasdaq"){
       els.marketSelect.value = "100";
@@ -908,6 +940,11 @@ document.querySelectorAll("[data-group]").forEach((button) => {
     }
     if(els.assetSelect.options.length > 0){
       els.assetSelect.selectedIndex = 0;
+    }
+    els.sourceSelect.value = activeGroup === "crypto" ? "binance" : (activeGroup === "taiwan" ? "twse" : "eastmoney");
+    if(activeGroup === "taiwan"){
+      els.currencySelect.value = "TWD";
+      currencyButtons();
     }
     syncSourceFields();
     applySelectedAsset().catch((err) => setHint(errText.switch + err.message, true));
@@ -1029,7 +1066,7 @@ function Web.new(backend, opts)
       httpd.start({
         webroot = "/sd",
         auto_index = httpd.INDEX_NONE,
-        max_handlers = 32,
+        max_handlers = 128,
       })
     end)
 
