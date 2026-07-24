@@ -494,6 +494,31 @@ local function split_csv(line)
   return out
 end
 
+-- 将不同来源的时间统一为毫秒数，图表据此保留休市和缺口的真实间距。
+local function chart_time_value(value)
+  local numeric = tonumber(value)
+  if numeric then
+    return numeric
+  end
+  local y, m, d, hh, mm = tostring(value or ""):match(
+    "^(%d%d%d%d)%-(%d%d)%-(%d%d)%s*(%d?%d?):?(%d?%d?)"
+  )
+  y, m, d = tonumber(y), tonumber(m), tonumber(d)
+  if not y or not m or not d then
+    return nil
+  end
+  hh = tonumber(hh) or 0
+  mm = tonumber(mm) or 0
+  y = y - (m <= 2 and 1 or 0)
+  local era = math.floor(y / 400)
+  local yoe = y - era * 400
+  local mp = m + (m > 2 and -3 or 9)
+  local doy = math.floor((153 * mp + 2) / 5) + d - 1
+  local doe = yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy
+  local days = era * 146097 + doe - 719468
+  return (days * 86400 + hh * 3600 + mm * 60) * 1000
+end
+
 -- 统计 K 线范围和收盘序列。
 local function summarize(candles, parsed)
   if #candles < 1 then
@@ -549,6 +574,28 @@ local function parse_binance(doc, asset)
     end
   end
   return summarize(candles, { currency = asset.quote or "USD" })
+end
+
+-- Binance K 线不包含 24 小时涨跌基准；单独读取官方 24hr ticker。
+local function build_binance_quote_url(asset)
+  return "https://data-api.binance.vision/api/v3/ticker/24hr?symbol="
+    .. url_encode(asset.symbol)
+end
+
+local function parse_binance_quote(doc)
+  if type(doc) ~= "table" then
+    return nil, "binance quote empty"
+  end
+  local current = tonumber(doc.lastPrice)
+  local prev = tonumber(doc.openPrice)
+  if not current or not prev or prev == 0 then
+    return nil, "binance quote price missing"
+  end
+  return {
+    current_price = current,
+    prev_close = prev,
+    live_source = "Binance 24h",
+  }, nil
 end
 
 -- 解析 Yahoo chart 结构，覆盖纳指、美股和金银铜。
@@ -682,6 +729,118 @@ local function parse_eastmoney(doc, asset)
     prev_close = prev_close,
     name = data.name,
   })
+end
+
+-- TWSE MIS 的台股代码：上市 tse_CODE.tw、上柜 otc_CODE.tw、加权指数 tse_t00.tw。
+local function twse_channel(asset)
+  local symbol = tostring(asset and asset.symbol or ""):upper()
+  if symbol == "^TWII" then
+    return "tse_t00.tw"
+  end
+  local code = symbol:gsub("%.TWO$", ""):gsub("%.TW$", "")
+  if code == "" then
+    return nil
+  end
+  return (symbol:match("%.TWO$") and "otc_" or "tse_") .. code .. ".tw"
+end
+
+local function build_twse_quote_url(asset)
+  local channel = twse_channel(asset)
+  if not channel then
+    return nil, "twse channel missing"
+  end
+  return "https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch="
+    .. url_encode(channel)
+    .. "&json=1&delay=0"
+end
+
+local function positive_number(value)
+  local n = tonumber(value)
+  if n and n > 0 then
+    return n
+  end
+  return nil
+end
+
+-- 解析 TWSE MIS 即时快照。z 是最新成交价，y 是昨收，o/h/l 是当日开高低。
+local function parse_twse_quote(doc)
+  local rows = type(doc) == "table" and doc.msgArray
+  local row = type(rows) == "table" and rows[1]
+  if type(row) ~= "table" then
+    return nil, "twse quote empty"
+  end
+
+  local current = positive_number(row.z) or positive_number(row.pz) or positive_number(row.y)
+  local prev_close = positive_number(row.y)
+  if not current or not prev_close then
+    return nil, "twse price missing"
+  end
+
+  local date = tostring(row.d or row["^"] or ""):gsub("[^%d]", "")
+  local quote_time = tostring(row.t or row["%"] or "")
+  if #date ~= 8 then
+    return nil, "twse date missing"
+  end
+
+  return {
+    current_price = current,
+    prev_close = prev_close,
+    open = positive_number(row.o) or current,
+    high = positive_number(row.h) or current,
+    low = positive_number(row.l) or current,
+    date = date,
+    time = quote_time,
+    timestamp = tonumber(row.tlong),
+    volume = tonumber(row.v) or 0,
+    name = tostring(row.n or ""),
+  }, nil
+end
+
+-- Eastmoney K 线里的 preKPrice 是请求区间前一根 K 线，并非昨收。
+-- f43/f60 分别是实时价和昨收，f59 是价格小数位。
+local function build_eastmoney_quote_url(asset)
+  return "https://push2.eastmoney.com/api/qt/stock/get?secid="
+    .. url_encode(asset.secid or asset.symbol)
+    .. "&fields=f43,f44,f45,f46,f57,f58,f59,f60,f169,f170"
+end
+
+local function eastmoney_quote_field(doc, key)
+  if type(doc) == "table" then
+    local data = doc.data
+    return type(data) == "table" and data[key] or nil
+  end
+  if type(doc) == "string" then
+    return doc:match('"' .. key .. '"%s*:%s*"?([%-%d%.]+)"?')
+  end
+  return nil
+end
+
+local function parse_eastmoney_quote(doc)
+  local decimals = tonumber(eastmoney_quote_field(doc, "f59")) or 2
+  if decimals < 0 or decimals > 8 then
+    decimals = 2
+  end
+  local scale = 10 ^ decimals
+  local function price(key)
+    local n = tonumber(eastmoney_quote_field(doc, key))
+    if not n or n <= 0 then
+      return nil
+    end
+    return n / scale
+  end
+  local current = price("f43")
+  local prev = price("f60")
+  if not current or not prev then
+    return nil, "eastmoney quote price missing"
+  end
+  return {
+    current_price = current,
+    prev_close = prev,
+    open = price("f46"),
+    high = price("f44"),
+    low = price("f45"),
+    live_source = "Eastmoney quote",
+  }, nil
 end
 
 -- 按来源构建公开接口 URL。
@@ -847,6 +1006,7 @@ function Backend.new(opts)
       ma_period = 0,
     },
     custom_asset = nil,
+    intraday = {},
     state = {
       valid = false,
       loading = false,
@@ -867,6 +1027,7 @@ function Backend.new(opts)
       change = nil,
       change_pct = nil,
       currency = "",
+      live_source = "",
       fx_rate = FX_FALLBACK_USD_CNY,
       fx_twd_rate = FX_FALLBACK_USD_TWD,
       fx_updated_text = "--",
@@ -1000,6 +1161,7 @@ function Backend.new(opts)
     s.prev_close = nil
     s.change = nil
     s.change_pct = nil
+    s.live_source = ""
     s.chart_dirty = true
   end
 
@@ -1038,10 +1200,167 @@ function Backend.new(opts)
       s.change_pct = nil
     end
     s.currency = parsed.currency or asset.quote or ""
+    s.live_source = parsed.live_source or asset.source or ""
     s.last_update_ms = now_ms()
     s.last_update_text = clock_text()
     s.next_fetch_at = now_ms() + MAIN_REFRESH_MS
     s.chart_dirty = true
+  end
+
+  -- 将实时价写入最新一根 K 线，同时保留该周期原有开高低。
+  function self:merge_live_quote(asset, historical, quote)
+    local candles = {}
+    for i = 1, #(historical.candles or {}) do
+      local c = historical.candles[i]
+      candles[#candles + 1] = {
+        time = c.time,
+        open = c.open,
+        high = c.high,
+        low = c.low,
+        close = c.close,
+      }
+    end
+
+    local current = tonumber(quote.current_price)
+    local last = candles[#candles]
+    if last and current then
+      last.close = current
+      last.high = math.max(tonumber(last.high) or current, current)
+      last.low = math.min(tonumber(last.low) or current, current)
+    elseif current then
+      candles[1] = {
+        time = clock_text(),
+        open = tonumber(quote.open) or current,
+        high = tonumber(quote.high) or current,
+        low = tonumber(quote.low) or current,
+        close = current,
+      }
+    end
+
+    return summarize(candles, {
+      currency = historical.currency or asset.quote or "",
+      prev_close = quote.prev_close,
+      current_price = current,
+      name = historical.name,
+      live_source = quote.live_source,
+    })
+  end
+
+  -- 将 TWSE 实时快照合并到图表。5m/1h 使用运行期间采样合成，
+  -- 日线及周线保留历史 K 线，并追加/更新当天实时 OHLC。
+  function self:merge_taiwan_quote(asset, interval, historical, quote)
+    local label = interval and interval.label or "5m"
+    local candles = {}
+    local date_text = quote.date:sub(1, 4) .. "-" .. quote.date:sub(5, 6) .. "-" .. quote.date:sub(7, 8)
+
+    if label == "5m" or label == "1h" then
+      local period_min = label == "1h" and 60 or 5
+      local hour, minute = tostring(quote.time or ""):match("^(%d%d):(%d%d)")
+      hour = tonumber(hour) or 0
+      minute = tonumber(minute) or 0
+      local bucket_minute = math.floor(minute / period_min) * period_min
+      local bucket_key = string.format("%s-%02d-%02d", quote.date, hour, bucket_minute)
+      local store_key = asset.id .. ":" .. label
+      local store = self.intraday[store_key]
+      if not store or store.date ~= quote.date then
+        store = { date = quote.date, candles = {} }
+        self.intraday[store_key] = store
+      end
+
+      local last = store.candles[#store.candles]
+      if last and last.key == bucket_key then
+        last.close = quote.current_price
+        last.high = math.max(last.high, quote.current_price)
+        last.low = math.min(last.low, quote.current_price)
+      else
+        store.candles[#store.candles + 1] = {
+          key = bucket_key,
+          time = string.format("%s %02d:%02d", date_text, hour, bucket_minute),
+          open = quote.current_price,
+          high = quote.current_price,
+          low = quote.current_price,
+          close = quote.current_price,
+        }
+        while #store.candles > DEFAULT_LIMIT do
+          table.remove(store.candles, 1)
+        end
+      end
+      for i = 1, #store.candles do
+        local c = store.candles[i]
+        candles[#candles + 1] = {
+          time = c.time,
+          open = c.open,
+          high = c.high,
+          low = c.low,
+          close = c.close,
+        }
+      end
+    else
+      for i = 1, #(historical.candles or {}) do
+        local c = historical.candles[i]
+        candles[#candles + 1] = {
+          time = c.time,
+          open = c.open,
+          high = c.high,
+          low = c.low,
+          close = c.close,
+        }
+      end
+
+      local live = {
+        time = date_text,
+        open = quote.open,
+        high = quote.high,
+        low = quote.low,
+        close = quote.current_price,
+      }
+      local last = candles[#candles]
+      local merge_last = last and tostring(last.time or ""):sub(1, 10) == date_text
+      if label == "7day" and last then
+        local function civil_days(text)
+          local y, m, d = tostring(text or ""):match("^(%d%d%d%d)%-(%d%d)%-(%d%d)")
+          y, m, d = tonumber(y), tonumber(m), tonumber(d)
+          if not y or not m or not d then return nil end
+          y = y - (m <= 2 and 1 or 0)
+          local era = math.floor(y / 400)
+          local yoe = y - era * 400
+          local mp = m + (m > 2 and -3 or 9)
+          local doy = math.floor((153 * mp + 2) / 5) + d - 1
+          local doe = yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy
+          return era * 146097 + doe - 719468
+        end
+        local last_day = civil_days(last.time)
+        local live_day = civil_days(date_text)
+        if last_day and live_day then
+          local last_week = last_day - ((last_day + 3) % 7)
+          local live_week = live_day - ((live_day + 3) % 7)
+          merge_last = last_week == live_week
+        end
+      end
+      if merge_last then
+        if label == "7day" then
+          last.time = date_text
+          last.high = math.max(tonumber(last.high) or quote.high, quote.high)
+          last.low = math.min(tonumber(last.low) or quote.low, quote.low)
+          last.close = quote.current_price
+        else
+          candles[#candles] = live
+        end
+      else
+        candles[#candles + 1] = live
+      end
+      while #candles > DEFAULT_LIMIT do
+        table.remove(candles, 1)
+      end
+    end
+
+    return summarize(candles, {
+      currency = "TWD",
+      prev_close = quote.prev_close,
+      current_price = quote.current_price,
+      name = quote.name,
+      live_source = "TWSE MIS",
+    })
   end
 
   -- 记录请求失败并安排较短重试。
@@ -1175,16 +1494,160 @@ function Backend.new(opts)
       if req_asset_id ~= self.settings.asset_id or req_interval ~= self.settings.interval then
         return
       end
-      if not ok then
-        self:fail(err, code)
+      local parsed = nil
+      local history_error = nil
+      if ok then
+        local perr = nil
+        parsed, perr = parse_by_source(asset, doc)
+        if not parsed then
+          history_error = "parse " .. tostring(perr)
+        end
+      else
+        history_error = tostring(err or ("http " .. tostring(code)))
+      end
+
+      if asset.group ~= "taiwan" then
+        local quote_url
+        local quote_job
+        local quote_parser
+        if asset.source == "binance" then
+          quote_url = build_binance_quote_url(asset)
+          quote_job = "binance_quote"
+          quote_parser = parse_binance_quote
+        elseif asset.source == "eastmoney" then
+          quote_url = build_eastmoney_quote_url(asset)
+          quote_job = "eastmoney"
+          quote_parser = parse_eastmoney_quote
+        end
+
+        -- 未知/自定义来源仍使用原始 K 线结果。
+        if not quote_url or not quote_parser then
+          if parsed then
+            self:apply_parsed(asset, parsed)
+          else
+            self:fail(history_error, code)
+          end
+          return
+        end
+
+        local historical = parsed or {
+          candles = {},
+          closes = {},
+          currency = asset.quote or "",
+        }
+
+        local quote_started = self:request_json(quote_job, quote_url, function(quote_ok, quote_doc, quote_err)
+          if req_asset_id ~= self.settings.asset_id or req_interval ~= self.settings.interval then
+            return
+          end
+          if not quote_ok then
+            if parsed then
+              self:apply_parsed(asset, parsed)
+              self.state.last_error = short_text("live " .. tostring(quote_err), 120)
+              self.state.tone = "warn"
+            else
+              self:fail("history " .. tostring(history_error) .. "; live " .. tostring(quote_err), -1)
+            end
+            return
+          end
+          local quote, quote_parse_err = quote_parser(quote_doc)
+          if not quote then
+            if parsed then
+              self:apply_parsed(asset, parsed)
+              self.state.last_error = short_text("live " .. tostring(quote_parse_err), 120)
+              self.state.tone = "warn"
+            else
+              self:fail("history " .. tostring(history_error) .. "; live " .. tostring(quote_parse_err), -1)
+            end
+            return
+          end
+          local merged, merge_err = self:merge_live_quote(asset, historical, quote)
+          if not merged then
+            self:fail("live merge " .. tostring(merge_err), -1)
+            return
+          end
+          self:apply_parsed(asset, merged)
+          if history_error then
+            self.state.last_error = short_text("history " .. history_error, 120)
+            self.state.tone = "warn"
+          end
+        end)
+        if not quote_started then
+          if parsed then
+            self:apply_parsed(asset, parsed)
+            self.state.last_error = "live quote busy"
+            self.state.tone = "warn"
+          else
+            self:fail("live quote busy", -1)
+          end
+        end
         return
       end
-      local parsed, perr = parse_by_source(asset, doc)
-      if not parsed then
-        self:fail("parse " .. tostring(perr), code)
+
+      -- 台股实时报价独立于历史图表：Eastmoney 暂时失败时仍继续请求 TWSE，
+      -- 以保证当前价、昨收和今日涨跌保持准确。
+      local historical = parsed or { candles = {}, closes = {}, currency = "TWD" }
+
+      local quote_url, quote_url_err = build_twse_quote_url(asset)
+      if not quote_url then
+        if parsed then
+          self:apply_parsed(asset, parsed)
+          self.state.last_error = short_text(quote_url_err or "twse url", 120)
+          self.state.tone = "warn"
+        else
+          self:fail(quote_url_err or history_error or "twse url", -1)
+        end
         return
       end
-      self:apply_parsed(asset, parsed)
+
+      local quote_started = self:request_json("twse_quote", quote_url, function(quote_ok, quote_doc, quote_err)
+        if req_asset_id ~= self.settings.asset_id or req_interval ~= self.settings.interval then
+          return
+        end
+        if not quote_ok then
+          if parsed then
+            self:apply_parsed(asset, parsed)
+            self.state.last_error = short_text("live " .. tostring(quote_err), 120)
+            self.state.tone = "warn"
+          else
+            self:fail("history " .. tostring(history_error) .. "; live " .. tostring(quote_err), -1)
+          end
+          return
+        end
+
+        local quote, quote_parse_err = parse_twse_quote(quote_doc)
+        if not quote then
+          if parsed then
+            self:apply_parsed(asset, parsed)
+            self.state.last_error = short_text("live " .. tostring(quote_parse_err), 120)
+            self.state.tone = "warn"
+          else
+            self:fail("history " .. tostring(history_error) .. "; live " .. tostring(quote_parse_err), -1)
+          end
+          return
+        end
+
+        local merged, merge_err = self:merge_taiwan_quote(asset, interval, historical, quote)
+        if not merged then
+          self:fail("live merge " .. tostring(merge_err), -1)
+          return
+        end
+        self:apply_parsed(asset, merged)
+        if history_error then
+          self.state.last_error = short_text("history " .. history_error, 120)
+          self.state.tone = "warn"
+        end
+      end)
+
+      if not quote_started then
+        if parsed then
+          self:apply_parsed(asset, parsed)
+          self.state.last_error = "live quote busy"
+          self.state.tone = "warn"
+        else
+          self:fail("live quote busy", -1)
+        end
+      end
     end)
   end
 
@@ -1397,14 +1860,17 @@ function Backend.new(opts)
         local open_p = display_price(asset, c.open, target_currency, fx_rate, fx_twd_rate) or close_p
         local high_p = display_price(asset, c.high, target_currency, fx_rate, fx_twd_rate) or math.max(open_p, close_p)
         local low_p = display_price(asset, c.low, target_currency, fx_rate, fx_twd_rate) or math.min(open_p, close_p)
-        if low_p and (not display_min or low_p < display_min) then
-          display_min = low_p
+        local range_low = self.settings.mode == "line" and close_p or low_p
+        local range_high = self.settings.mode == "line" and close_p or high_p
+        if range_low and (not display_min or range_low < display_min) then
+          display_min = range_low
         end
-        if high_p and (not display_max or high_p > display_max) then
-          display_max = high_p
+        if range_high and (not display_max or range_high > display_max) then
+          display_max = range_high
         end
         points[#points + 1] = {
           time = c.time,
+          time_value = chart_time_value(c.time),
           open = open_p,
           high = high_p,
           low = low_p,
@@ -1458,6 +1924,7 @@ function Backend.new(opts)
       currency = target_currency,
       currency_text = currency_text(target_currency),
       source_currency = s.currency or asset.quote or "",
+      live_source = s.live_source ~= "" and s.live_source or asset.source,
       unit_text = unit_text(asset),
       min_price = display_min,
       max_price = display_max,

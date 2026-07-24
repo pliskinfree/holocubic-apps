@@ -258,6 +258,24 @@ local function ma_text(period)
   return ""
 end
 
+local function chart_x(points, index, left, width)
+  if #points <= 1 then
+    return left + math.floor(width / 2)
+  end
+  local first = tonumber(points[1] and points[1].time_value)
+  local last = tonumber(points[#points] and points[#points].time_value)
+  local current = tonumber(points[index] and points[index].time_value)
+  local ratio
+  if first and last and current and last > first then
+    ratio = (current - first) / (last - first)
+  else
+    ratio = (index - 1) / (#points - 1)
+  end
+  if ratio < 0 then ratio = 0 end
+  if ratio > 1 then ratio = 1 end
+  return left + math.floor(ratio * (width - 1) + 0.5)
+end
+
 -- 绘制收盘折线。
 local function draw_line_series(id, points, minp, maxp, left, top, width, height, tone, red_up)
   local color = tone_color(tone, red_up)
@@ -267,16 +285,10 @@ local function draw_line_series(id, points, minp, maxp, left, top, width, height
 
   local ok = true
   local prev_x, prev_y
-  local denom = #points > 1 and (#points - 1) or 1
   for i = 1, #points do
     local close = tonumber(points[i].close)
     if close then
-      local x
-      if #points == 1 then
-        x = left + math.floor(width / 2)
-      else
-        x = left + math.floor((i - 1) * (width - 1) / denom + 0.5)
-      end
+      local x = chart_x(points, i, left, width)
       local y = chart_y(close, minp, maxp, top, height)
       if prev_x then
         ok = draw_line(id, prev_x, prev_y, x, y, color, 255, 2) and ok
@@ -300,7 +312,6 @@ local function draw_ma_series(id, points, period, minp, maxp, left, top, width, 
 
   local ok = true
   local prev_x, prev_y
-  local denom = #points > 1 and (#points - 1) or 1
   for i = period, #points do
     local sum = 0
     local count = 0
@@ -313,7 +324,7 @@ local function draw_ma_series(id, points, period, minp, maxp, left, top, width, 
     end
 
     if count == period then
-      local x = left + math.floor((i - 1) * (width - 1) / denom + 0.5)
+      local x = chart_x(points, i, left, width)
       local y = chart_y(sum / period, minp, maxp, top, height)
       if prev_x then
         ok = draw_line(id, prev_x, prev_y, x, y, C.line, 255, 1) and ok
@@ -348,7 +359,7 @@ local function draw_candles(id, points, minp, maxp, left, top, width, height, re
     local low_p = tonumber(c.low) or math.min(open_p or 0, close or 0)
 
     if open_p and high_p and low_p and close then
-      local cx = left + math.floor((i - 0.5) * step + 0.5)
+      local cx = chart_x(points, i, left, width)
       local y_open = chart_y(open_p, minp, maxp, top, height)
       local y_close = chart_y(close, minp, maxp, top, height)
       local y_high = chart_y(high_p, minp, maxp, top, height)

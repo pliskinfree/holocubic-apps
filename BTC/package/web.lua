@@ -350,7 +350,7 @@ select:focus,input:focus,button:focus-visible{border-color:rgba(10,132,255,.5);b
           <select id="sourceSelect">
             <option value="binance" data-i18n="crypto">币价</option>
             <option value="eastmoney" data-i18n="eastmoney">Eastmoney公开</option>
-            <option value="twse" data-i18n="twse">台湾行情 (Eastmoney)</option>
+            <option value="twse" data-i18n="twse">台湾行情 (TWSE MIS)</option>
           </select>
         </div>
         <div class="field" id="marketField">
@@ -383,7 +383,7 @@ select:focus,input:focus,button:focus-visible{border-color:rgba(10,132,255,.5);b
   </section>
   <footer class="site-footer">
     <div>Copyright &copy; 2026 clocteck. Licensed under GPL-3.0. Open source: <a href="https://github.com/clocteck" target="_blank" rel="noopener">github.com/clocteck</a>.</div>
-    <div>Data sources: Binance, Eastmoney, and open.er-api.com FX rates. Taiwan presets use Eastmoney public market data. For display only; not financial advice.</div>
+    <div>Data sources: Binance, Eastmoney, TWSE MIS, and open.er-api.com FX rates. For display only; not financial advice.</div>
   </footer>
 </main>
 
@@ -391,10 +391,10 @@ select:focus,input:focus,button:focus-visible{border-color:rgba(10,132,255,.5);b
 const API = "]=], api_prefix, [=[";
 const LANG = "]=], language, [=[";
 const MESSAGES = {
-  "zh-CN": {main:"主页",interval:"周期",high:"最高",low:"最低",updated:"更新",crypto:"币价",nasdaq:"纳斯达克",metal:"金银铜",ashare:"A股",taiwan:"台股",currency:"显示币种",usd:"美金",cny:"人民币",twd:"新台币",asset:"标的",trend_interval:"走势周期",chart:"图表",line:"折线",candle:"K线",ma:"均线",off:"不显示",refresh:"刷新",custom:"自定义",source:"来源",eastmoney:"Eastmoney公开",yahoo:"Yahoo Finance",twse:"台湾行情 (Eastmoney)",market:"市场",shanghai:"沪市/指数",shenzhen:"深市",nasdaq_index:"纳斯达克指数",us_stock:"美股",metal_futures:"金银铜期货",symbol:"代码",name:"名称",add_view:"添加并查看",clear:"清空",loading:"加载中",ready:"就绪",cold:"启动中",error:"错误"},
-  en: {main:"Main",interval:"Interval",high:"High",low:"Low",updated:"Updated",crypto:"Crypto",nasdaq:"Nasdaq",metal:"Metals",ashare:"A-shares",taiwan:"Taiwan",currency:"Display currency",usd:"USD",cny:"CNY",twd:"TWD",asset:"Asset",trend_interval:"Trend interval",chart:"Chart",line:"Line",candle:"Candles",ma:"Moving average",off:"Off",refresh:"Refresh",custom:"Custom",source:"Source",eastmoney:"Eastmoney public",yahoo:"Yahoo Finance",twse:"Taiwan quotes (Eastmoney)",market:"Market",shanghai:"Shanghai / Index",shenzhen:"Shenzhen",nasdaq_index:"Nasdaq index",us_stock:"US stocks",metal_futures:"Metal futures",symbol:"Symbol",name:"Name",add_view:"Add and view",clear:"Clear",loading:"Loading",ready:"Ready",cold:"Starting",error:"Error"},
-  ja: {main:"メイン",interval:"期間",high:"高値",low:"安値",updated:"更新",crypto:"暗号資産",nasdaq:"ナスダック",metal:"金銀銅",ashare:"中国A株",taiwan:"台湾株",currency:"表示通貨",usd:"米ドル",cny:"人民元",twd:"台湾ドル",asset:"銘柄",trend_interval:"表示期間",chart:"チャート",line:"折線",candle:"ローソク",ma:"移動平均",off:"表示しない",refresh:"更新",custom:"カスタム",source:"データ元",eastmoney:"Eastmoney公開",yahoo:"Yahoo Finance",twse:"台湾相場 (Eastmoney)",market:"市場",shanghai:"上海 / 指数",shenzhen:"深圳",nasdaq_index:"ナスダック指数",us_stock:"米国株",metal_futures:"金属先物",symbol:"コード",name:"名称",add_view:"追加して表示",clear:"クリア",loading:"読込中",ready:"準備完了",cold:"起動中",error:"エラー"},
-  "zh-TW": {main:"主頁",interval:"週期",high:"最高",low:"最低",updated:"更新",crypto:"幣價",nasdaq:"那斯達克",metal:"金銀銅",ashare:"A股",taiwan:"台股",currency:"顯示幣別",usd:"美元",cny:"人民幣",twd:"新台幣",asset:"標的",trend_interval:"走勢週期",chart:"圖表",line:"折線",candle:"K線",ma:"均線",off:"不顯示",refresh:"重新整理",custom:"自訂",source:"來源",eastmoney:"Eastmoney公開",yahoo:"Yahoo Finance",twse:"臺灣行情 (Eastmoney)",market:"市場",shanghai:"滬市/指數",shenzhen:"深市",nasdaq_index:"那斯達克指數",us_stock:"美股",metal_futures:"金銀銅期貨",symbol:"代碼",name:"名稱",add_view:"新增並檢視",clear:"清除",loading:"載入中",ready:"就緒",cold:"啟動中",error:"錯誤"}
+  "zh-CN": {main:"主页",interval:"周期",high:"最高",low:"最低",updated:"更新",crypto:"币价",nasdaq:"纳斯达克",metal:"金银铜",ashare:"A股",taiwan:"台股",currency:"显示币种",usd:"美金",cny:"人民币",twd:"新台币",asset:"标的",trend_interval:"走势周期",chart:"图表",line:"折线",candle:"K线",ma:"均线",off:"不显示",refresh:"刷新",custom:"自定义",source:"来源",eastmoney:"Eastmoney公开",yahoo:"Yahoo Finance",twse:"台湾行情 (TWSE MIS)",market:"市场",shanghai:"沪市/指数",shenzhen:"深市",nasdaq_index:"纳斯达克指数",us_stock:"美股",metal_futures:"金银铜期货",symbol:"代码",name:"名称",add_view:"添加并查看",clear:"清空",loading:"加载中",ready:"就绪",cold:"启动中",error:"错误"},
+  en: {main:"Main",interval:"Interval",high:"High",low:"Low",updated:"Updated",crypto:"Crypto",nasdaq:"Nasdaq",metal:"Metals",ashare:"A-shares",taiwan:"Taiwan",currency:"Display currency",usd:"USD",cny:"CNY",twd:"TWD",asset:"Asset",trend_interval:"Trend interval",chart:"Chart",line:"Line",candle:"Candles",ma:"Moving average",off:"Off",refresh:"Refresh",custom:"Custom",source:"Source",eastmoney:"Eastmoney public",yahoo:"Yahoo Finance",twse:"Taiwan quotes (TWSE MIS)",market:"Market",shanghai:"Shanghai / Index",shenzhen:"Shenzhen",nasdaq_index:"Nasdaq index",us_stock:"US stocks",metal_futures:"Metal futures",symbol:"Symbol",name:"Name",add_view:"Add and view",clear:"Clear",loading:"Loading",ready:"Ready",cold:"Starting",error:"Error"},
+  ja: {main:"メイン",interval:"期間",high:"高値",low:"安値",updated:"更新",crypto:"暗号資産",nasdaq:"ナスダック",metal:"金銀銅",ashare:"中国A株",taiwan:"台湾株",currency:"表示通貨",usd:"米ドル",cny:"人民元",twd:"台湾ドル",asset:"銘柄",trend_interval:"表示期間",chart:"チャート",line:"折線",candle:"ローソク",ma:"移動平均",off:"表示しない",refresh:"更新",custom:"カスタム",source:"データ元",eastmoney:"Eastmoney公開",yahoo:"Yahoo Finance",twse:"台湾相場 (TWSE MIS)",market:"市場",shanghai:"上海 / 指数",shenzhen:"深圳",nasdaq_index:"ナスダック指数",us_stock:"米国株",metal_futures:"金属先物",symbol:"コード",name:"名称",add_view:"追加して表示",clear:"クリア",loading:"読込中",ready:"準備完了",cold:"起動中",error:"エラー"},
+  "zh-TW": {main:"主頁",interval:"週期",high:"最高",low:"最低",updated:"更新",crypto:"幣價",nasdaq:"那斯達克",metal:"金銀銅",ashare:"A股",taiwan:"台股",currency:"顯示幣別",usd:"美元",cny:"人民幣",twd:"新台幣",asset:"標的",trend_interval:"走勢週期",chart:"圖表",line:"折線",candle:"K線",ma:"均線",off:"不顯示",refresh:"重新整理",custom:"自訂",source:"來源",eastmoney:"Eastmoney公開",yahoo:"Yahoo Finance",twse:"臺灣行情 (TWSE MIS)",market:"市場",shanghai:"滬市/指數",shenzhen:"深市",nasdaq_index:"那斯達克指數",us_stock:"美股",metal_futures:"金銀銅期貨",symbol:"代碼",name:"名稱",add_view:"新增並檢視",clear:"清除",loading:"載入中",ready:"就緒",cold:"啟動中",error:"錯誤"}
 };
 const MSG = MESSAGES[LANG] || MESSAGES["zh-CN"];
 const tr = (key) => MSG[key] || MESSAGES["zh-CN"][key] || key;
@@ -682,7 +682,16 @@ function drawChart(state){
   const upColor = colors.up;
   const downColor = colors.down;
   function xOf(index){
-    return points.length === 1 ? padL + cw / 2 : padL + cw * index / Math.max(1, points.length - 1);
+    if(points.length === 1){
+      return padL + cw / 2;
+    }
+    const first = Number(points[0] && points[0].time_value);
+    const last = Number(points[points.length - 1] && points[points.length - 1].time_value);
+    const current = Number(points[index] && points[index].time_value);
+    if(Number.isFinite(first) && Number.isFinite(last) && Number.isFinite(current) && last > first){
+      return padL + cw * Math.max(0, Math.min(1, (current - first) / (last - first)));
+    }
+    return padL + cw * index / Math.max(1, points.length - 1);
   }
 
   function drawMovingAverage(period){
@@ -736,7 +745,7 @@ function drawChart(state){
         return;
       }
 
-      const cx = padL + step * (index + 0.5);
+      const cx = xOf(index);
       const yHigh = yOf(high);
       const yLow = yOf(low);
       const yOpen = yOf(open);
@@ -823,7 +832,7 @@ function renderState(state){
   const fx = state.currency === "CNY"
     ? " · USD/CNY " + rateLabel(state.fx_rate)
     : (state.currency === "TWD" ? " · USD/TWD " + rateLabel(state.fx_twd_rate) : "");
-  els.routeMeta.textContent = safe(active.source, "--") + " · " + safe(active.symbol || active.secid, "--") + fx;
+  els.routeMeta.textContent = safe(state.live_source || active.source, "--") + " · " + safe(active.symbol || active.secid, "--") + fx;
   els.assetName.textContent = assetDisplayName(active);
   els.assetMeta.textContent = (groupText[active.group] || safe(active.group, "--")) + " · " + currency;
   els.priceText.textContent = safe(state.price_text, "--");

@@ -328,7 +328,7 @@
             <strong>Binance public market data</strong>
           </div>
           <div class="source">
-            <span data-i18n="eastmoneyLabel">股票、台股、指数、金银铜</span>
+            <span data-i18n="eastmoneyLabel">股票、指数、金银铜与历史 K 线</span>
             <strong>Eastmoney public market data</strong>
           </div>
           <div class="source">
@@ -344,7 +344,7 @@
             <strong data-i18n="backupFxValue">内置 USD/CNY 与 USD/TWD 参考值</strong>
           </div>
         </div>
-        <p class="note" data-i18n="sourceNote">台股和内置美股固定使用 Eastmoney。Yahoo Finance 仅用于兼容旧版自定义配置，可能受地区访问策略限制；汇率接口不可用时采用内置参考值维持显示，不代表实时汇率。</p>
+        <p class="note" data-i18n="sourceNote">台股实时价与昨收使用 TWSE MIS，历史 K 线和其他内置证券使用 Eastmoney。Yahoo Finance 仅用于兼容旧版自定义配置；汇率接口不可用时采用内置参考值维持显示。</p>
         <p class="note" data-i18n="riskNote">行情仅用于显示和观察，不构成投资建议；网络或公开接口异常时数据可能延迟。</p>
       </section>
 
@@ -365,7 +365,7 @@
           </li>
           <li>
             <span class="badge">4</span>
-            <span><strong data-i18n="featureFourTitle">1.2.0 更新说明</strong><span data-i18n="featureFourText">新增台股、TWD 与繁体中文；修复台股折线、涨跌计算和 Web 空白问题，并改用公开 HTTPS 原始数据地址。</span></span>
+            <span><strong data-i18n="featureFourTitle">1.2.1 更新说明</strong><span data-i18n="featureFourText">修复盘中涨跌基准、台股周线及折线缩放与时间轴；实时价同步到最新图表点，历史接口异常时仍显示实时行情。</span></span>
           </li>
         </ul>
       </section>
@@ -378,7 +378,7 @@
           </div>
           <div class="meta-item">
             <span class="label" data-i18n="versionLabel">版本号</span>
-            <span class="value">1.2.0</span>
+            <span class="value">1.2.1</span>
           </div>
         </div>
       </section>    </div>
@@ -404,12 +404,12 @@
           customNote: "Web 控制页还可添加自定义 Binance 交易对，或通过 Eastmoney 添加沪深 A 股、台股、指数和金银铜期货代码。",
           sourceTitle: "信息来源",
           binanceLabel: "币价",
-          eastmoneyLabel: "股票、台股、指数、金银铜",
+          eastmoneyLabel: "股票、指数、金银铜与历史 K 线",
           fxLabel: "美元/人民币/新台币汇率",
           backupMarketLabel: "兼容/备用证券来源",
           backupFxLabel: "离线汇率兜底",
           backupFxValue: "内置 USD/CNY 与 USD/TWD 参考值",
-          sourceNote: "台股和内置美股固定使用 Eastmoney。Yahoo Finance 仅用于兼容旧版自定义配置，可能受地区访问策略限制；汇率接口不可用时采用内置参考值维持显示，不代表实时汇率。",
+          sourceNote: "台股实时价与昨收使用 TWSE MIS，历史 K 线和其他内置证券使用 Eastmoney。Yahoo Finance 仅用于兼容旧版自定义配置；汇率接口不可用时采用内置参考值维持显示。",
           riskNote: "行情仅用于显示和观察，不构成投资建议；网络或公开接口异常时数据可能延迟。",
           featureTitle: "功能说明",
           featureOneTitle: "多周期走势",
@@ -418,8 +418,8 @@
           featureTwoText: "支持折线、K 线，以及 MA10 / MA20 均线。",
           featureThreeTitle: "币种显示",
           featureThreeText: "支持 USD、CNY 与 TWD 显示，金银铜按每克换算。",
-          featureFourTitle: "1.2.0 更新说明",
-          featureFourText: "新增台股、TWD 与繁体中文；修复台股折线、涨跌计算和 Web 空白问题，并改用公开 HTTPS 原始数据地址。",
+          featureFourTitle: "1.2.1 更新说明",
+          featureFourText: "修复盘中涨跌基准、台股周线及折线缩放与时间轴；实时价同步到最新图表点，历史接口异常时仍显示实时行情。",
           appInfoTitle: "应用信息",
           sizeLabel: "安装包大小",
           sizeValue: "约 878 KB",
@@ -438,12 +438,12 @@
           customNote: "The Web console can also add custom Binance pairs, or Eastmoney symbols for A-shares, Taiwan stocks, indexes, and metal futures.",
           sourceTitle: "Data Sources",
           binanceLabel: "Crypto quotes",
-          eastmoneyLabel: "Stocks, Taiwan stocks, indexes, and metals",
+          eastmoneyLabel: "Stocks, indexes, metals, and historical charts",
           fxLabel: "USD/CNY/TWD FX rates",
           backupMarketLabel: "Compatible / backup market source",
           backupFxLabel: "Offline FX fallback",
           backupFxValue: "Built-in USD/CNY and USD/TWD reference rates",
-          sourceNote: "Taiwan presets and built-in US stocks use Eastmoney. Yahoo Finance is retained only for legacy custom settings and may be region-restricted. Built-in FX reference rates keep the UI available when the live FX service fails; they are not real-time quotes.",
+          sourceNote: "Taiwan real-time quotes and previous closes use TWSE MIS. Historical charts and other built-in securities use Eastmoney. Yahoo Finance is retained only for legacy custom settings.",
           riskNote: "Quotes are for display and observation only, not financial advice. Data may be delayed when the network or public APIs fail.",
           featureTitle: "Features",
           featureOneTitle: "Multiple intervals",
@@ -452,8 +452,8 @@
           featureTwoText: "Supports line charts, candlesticks, and MA10 / MA20 moving averages.",
           featureThreeTitle: "Display currency",
           featureThreeText: "Supports USD, CNY, and TWD display. Gold, silver, and copper are converted to price per gram.",
-          featureFourTitle: "Version 1.2.0",
-          featureFourText: "Adds Taiwan stocks, TWD, and Traditional Chinese; fixes Taiwan charts, change calculations, and the blank Web page; and uses public HTTPS source URLs.",
+          featureFourTitle: "Version 1.2.1",
+          featureFourText: "Fixes intraday change baselines, Taiwan weekly bars, line scaling, and time spacing; merges live quotes into charts and keeps quotes visible when history is unavailable.",
           appInfoTitle: "App Info",
           sizeLabel: "Package size",
           sizeValue: "About 878 KB",
